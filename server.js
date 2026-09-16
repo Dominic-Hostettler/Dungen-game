@@ -7,6 +7,8 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const { Server } = require('socket.io');
+const { MongoClient } = require('mongodb');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 const server = http.createServer(app);
@@ -15,6 +17,55 @@ const io = new Server(server, {
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ---------------- Datenbank (Accounts / dauerhafter Fortschritt) ----------------
+const MONGO_URI = process.env.MONGO_URI || '';
+let accountsCol = null;
+
+async function initDb() {
+  if (!MONGO_URI) {
+    console.warn('WARNUNG: MONGO_URI ist nicht gesetzt. Accounts werden NICHT gespeichert (nur In-Memory, geht bei Neustart verloren).');
+    return;
+  }
+  try {
+    const client = new MongoClient(MONGO_URI);
+    await client.connect();
+    const db = client.db('leo_dungeon_rpg');
+    accountsCol = db.collection('accounts');
+    await accountsCol.createIndex({ username: 1 }, { unique: true });
+    console.log('MongoDB verbunden - Accounts werden dauerhaft gespeichert.');
+  } catch (err) {
+    console.error('MongoDB-Verbindung fehlgeschlagen:', err.message);
+  }
+}
+initDb();
+
+async function loadAccount(username) {
+  if (!accountsCol) return null;
+  return accountsCol.findOne({ username });
+}
+
+async function createAccount(username, passwordHash, cls) {
+  const doc = {
+    username, passwordHash, cls,
+    level: 1, xp: 0, gold: 0, potions: 1,
+    createdAt: new Date()
+  };
+  if (accountsCol) await accountsCol.insertOne(doc);
+  return doc;
+}
+
+async function saveAccountProgress(p) {
+  if (!accountsCol || !p.username) return;
+  try {
+    await accountsCol.updateOne(
+      { username: p.username },
+      { $set: { level: p.level, xp: p.xp, gold: p.gold, potions: p.potions, cls: p.cls } }
+    );
+  } catch (err) {
+    console.error('Speichern fehlgeschlagen fuer', p.username, err.message);
+  }
+}
 
 // ---------------- Konfiguration ----------------
 const TILE = 32;
@@ -75,6 +126,15 @@ const CLASSES = {
   magier:  { name: 'Magier',  maxHp: 80,  speed: 2.1, dmg: 24, range: 240, cooldown: 750, kind: 'ranged', color: '#3498db' },
   schurke: { name: 'Schurke', maxHp: 100, speed: 3.0, dmg: 13, range: 36, cooldown: 320, kind: 'melee', color: '#2ecc71', crit: 0.25 }
 };
+
+function statsForLevel(clsKey, level) {
+  const def = CLASSES[clsKey] || CLASSES.krieger;
+  const lvlBonus = Math.max(0, level - 1);
+  return {
+    maxHp: def.maxHp + lvlBonus * 18,
+    dmg: def.dmg + lvlBonus * 3
+  };
+}
 
 // ---------------- Game-State ----------------
 const players = {};     // id -> player
@@ -162,6 +222,7 @@ function levelUp(p) {
   p.maxHp += 18;
   p.dmg += 3;
   p.hp = p.maxHp;
+  saveAccountProgress(p);
 }
 
 function grantXp(p, amount) {
@@ -171,37 +232,68 @@ function grantXp(p, amount) {
 
 // ---------------- Socket-Handling ----------------
 io.on('connection', (socket) => {
-  socket.on('join', (data) => {
-    const name = (data && data.name ? String(data.name).slice(0, 16) : 'Held').trim() || 'Held';
-    const classKey = CLASSES[data && data.cls] ? data.cls : 'krieger';
-    const def = CLASSES[classKey];
+  socket.on('auth', async (data) => {
+    try {
+      const mode = data && data.mode === 'register' ? 'register' : 'login';
+      const username = (data && data.username ? String(data.username) : '').trim().toLowerCase().slice(0, 20);
+      const password = data && data.password ? String(data.password) : '';
+      const name = (data && data.name ? String(data.name) : username).trim().slice(0, 16) || 'Held';
 
-    players[socket.id] = {
-      id: socket.id,
-      name,
-      cls: classKey,
-      x: SPAWN_POINT.x,
-      y: SPAWN_POINT.y,
-      hp: def.maxHp,
-      maxHp: def.maxHp,
-      dmg: def.dmg,
-      speed: def.speed,
-      level: 1,
-      xp: 0,
-      xpNext: xpToNextLevel(1),
-      gold: 0,
-      potions: 1,
-      lastAttack: 0,
-      dead: false,
-      input: { up: false, down: false, left: false, right: false, aimX: 0, aimY: 0 }
-    };
+      if (!username || username.length < 3) {
+        return socket.emit('authError', 'Benutzername muss mind. 3 Zeichen haben.');
+      }
+      if (!password || password.length < 4) {
+        return socket.emit('authError', 'Passwort muss mind. 4 Zeichen haben.');
+      }
+      if (!accountsCol) {
+        return socket.emit('authError', 'Datenbank nicht verbunden - Accounts sind aktuell deaktiviert. (MONGO_URI fehlt auf dem Server)');
+      }
 
-    socket.emit('init', {
-      you: socket.id,
-      map: MAP_ROWS,
-      tile: TILE,
-      classes: CLASSES
-    });
+      let account = await loadAccount(username);
+
+      if (mode === 'register') {
+        if (account) return socket.emit('authError', 'Dieser Benutzername ist bereits vergeben.');
+        const classKey = CLASSES[data && data.cls] ? data.cls : 'krieger';
+        const hash = await bcrypt.hash(password, 10);
+        account = await createAccount(username, hash, classKey);
+      } else {
+        if (!account) return socket.emit('authError', 'Diesen Account gibt es nicht. Bitte zuerst registrieren.');
+        const ok = await bcrypt.compare(password, account.passwordHash);
+        if (!ok) return socket.emit('authError', 'Falsches Passwort.');
+      }
+
+      const stats = statsForLevel(account.cls, account.level);
+      players[socket.id] = {
+        id: socket.id,
+        username,
+        name: name || username,
+        cls: account.cls,
+        x: SPAWN_POINT.x,
+        y: SPAWN_POINT.y,
+        hp: stats.maxHp,
+        maxHp: stats.maxHp,
+        dmg: stats.dmg,
+        speed: CLASSES[account.cls].speed,
+        level: account.level,
+        xp: account.xp,
+        xpNext: xpToNextLevel(account.level),
+        gold: account.gold,
+        potions: account.potions,
+        lastAttack: 0,
+        dead: false,
+        input: { up: false, down: false, left: false, right: false, aimX: 0, aimY: 0 }
+      };
+
+      socket.emit('init', {
+        you: socket.id,
+        map: MAP_ROWS,
+        tile: TILE,
+        classes: CLASSES
+      });
+    } catch (err) {
+      console.error('Auth-Fehler:', err.message);
+      socket.emit('authError', 'Es ist ein Fehler aufgetreten. Bitte versuch es erneut.');
+    }
   });
 
   socket.on('input', (inp) => {
@@ -268,9 +360,16 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    const p = players[socket.id];
+    if (p) saveAccountProgress(p);
     delete players[socket.id];
   });
 });
+
+// Autosave alle 30 Sekunden, falls der Server mal ohne "disconnect" beendet wird
+setInterval(() => {
+  for (const id in players) saveAccountProgress(players[id]);
+}, 30000);
 
 // ---------------- Game-Loop ----------------
 function tick() {
