@@ -124,7 +124,8 @@ const SPAWN_POINT = { x: 2 * TILE + TILE / 2, y: 1 * TILE + TILE / 2 };
 const CLASSES = {
   krieger: { name: 'Krieger', maxHp: 150, speed: 2.4, dmg: 18, range: 42, cooldown: 500, kind: 'melee', color: '#e74c3c' },
   magier:  { name: 'Magier',  maxHp: 80,  speed: 2.1, dmg: 24, range: 240, cooldown: 750, kind: 'ranged', color: '#3498db' },
-  schurke: { name: 'Schurke', maxHp: 100, speed: 3.0, dmg: 13, range: 36, cooldown: 320, kind: 'melee', color: '#2ecc71', crit: 0.25 }
+  schurke: { name: 'Schurke', maxHp: 100, speed: 3.0, dmg: 13, range: 36, cooldown: 320, kind: 'melee', color: '#2ecc71', crit: 0.25 },
+  schurke: { name: 'Hacker', maxHp: 10000, speed: 6.0, dmg: 1000, range: 300, cooldown: 0, kind: 'ranged', color: '#2ecc71', crit: 0.25 }
 };
 
 function statsForLevel(clsKey, level) {
@@ -150,7 +151,7 @@ const MONSTER_TYPES = {
   goblin: { hp: 40, dmg: 8, speed: 1.3, xp: 15, range: 30, cooldown: 900, color: '#8e7c4d', radius: 12 },
   ork:    { hp: 95, dmg: 16, speed: 0.9, xp: 40, range: 34, cooldown: 1200, color: '#5b4636', radius: 16 }
 };
-const MAX_MONSTERS = 14;
+const MAX_MONSTERS = 20;
 
 function spawnMonster() {
   if (Object.keys(monsters).length >= MAX_MONSTERS) return;
