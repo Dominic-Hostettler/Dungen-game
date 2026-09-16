@@ -125,7 +125,6 @@ const CLASSES = {
   krieger: { name: 'Krieger', maxHp: 150, speed: 2.4, dmg: 18, range: 42, cooldown: 500, kind: 'melee', color: '#e74c3c' },
   magier:  { name: 'Magier',  maxHp: 80,  speed: 2.1, dmg: 24, range: 240, cooldown: 750, kind: 'ranged', color: '#3498db' },
   schurke: { name: 'Schurke', maxHp: 100, speed: 3.0, dmg: 13, range: 36, cooldown: 320, kind: 'melee', color: '#2ecc71', crit: 0.25 },
-  hacker: { name: 'Hacker', maxHp: 10000, speed: 6.0, dmg: 1000, range: 300, cooldown: 0, kind: 'ranged', color: '#2ecc71', crit: 0.25 }
 };
 
 function statsForLevel(clsKey, level) {
