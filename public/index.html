@@ -96,8 +96,17 @@
     <div class="card">
       <h1>⚔️ Leo's Dungeon</h1>
       <p class="sub">Echtzeit Multiplayer Dungeon-RPG</p>
-      <input type="text" id="nameInput" placeholder="Dein Heldenname" maxlength="16">
-      <div class="classGrid">
+
+      <div class="tabRow" style="display:flex; gap:8px; margin-bottom:14px;">
+        <button type="button" class="tabBtn selected" data-tab="login" style="flex:1; padding:8px; border-radius:8px 8px 0 0; border:none; background:#241d0f; color:var(--accent); cursor:pointer;">Einloggen</button>
+        <button type="button" class="tabBtn" data-tab="register" style="flex:1; padding:8px; border-radius:8px 8px 0 0; border:none; background:#0d1117; color:#8892a0; cursor:pointer;">Registrieren</button>
+      </div>
+
+      <input type="text" id="userInput" placeholder="Benutzername" maxlength="20" autocomplete="username">
+      <input type="password" id="passInput" placeholder="Passwort" maxlength="40" autocomplete="current-password">
+      <input type="text" id="nameInput" placeholder="Anzeigename (im Spiel sichtbar)" maxlength="16">
+
+      <div class="classGrid" id="classGrid">
         <div class="classBtn selected" data-cls="krieger">
           <span class="icon">🛡️</span>Krieger<small>Viel HP, Nahkampf</small>
         </div>
@@ -108,7 +117,8 @@
           <span class="icon">🗡️</span>Schurke<small>Schnell, Krit-Chance</small>
         </div>
       </div>
-      <button id="playBtn">Ins Dungeon!</button>
+      <div id="authMsg" style="color:#ff8080; font-size:12px; min-height:16px; margin-bottom:8px; text-align:center;"></div>
+      <button id="playBtn">Einloggen &amp; Ins Dungeon!</button>
     </div>
   </div>
 </div>
@@ -127,6 +137,20 @@ let selectedClass = 'krieger';
 let hitFx = [];
 
 // ---------------- Startscreen ----------------
+let authMode = 'login';
+document.querySelectorAll('.tabBtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tabBtn').forEach(b => {
+      b.classList.remove('selected');
+      b.style.background = '#0d1117'; b.style.color = '#8892a0';
+    });
+    btn.classList.add('selected');
+    btn.style.background = '#241d0f'; btn.style.color = 'var(--accent)';
+    authMode = btn.dataset.tab;
+    document.getElementById('playBtn').textContent = authMode === 'register' ? 'Account erstellen & Spielen!' : 'Einloggen & Ins Dungeon!';
+  });
+});
+
 document.querySelectorAll('.classBtn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.classBtn').forEach(b => b.classList.remove('selected'));
@@ -136,26 +160,40 @@ document.querySelectorAll('.classBtn').forEach(btn => {
 });
 
 document.getElementById('playBtn').addEventListener('click', startGame);
-document.getElementById('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') startGame(); });
+document.getElementById('passInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') startGame(); });
 
+let authSocket = null;
 function startGame() {
-  const name = document.getElementById('nameInput').value.trim() || 'Held';
-  document.getElementById('startScreen').style.display = 'none';
-  document.getElementById('hud').style.display = 'flex';
-  document.getElementById('hint').style.display = 'block';
-  document.getElementById('chatInput').style.display = 'block';
+  const username = document.getElementById('userInput').value.trim();
+  const password = document.getElementById('passInput').value;
+  const name = document.getElementById('nameInput').value.trim() || username;
+  const msgBox = document.getElementById('authMsg');
+  msgBox.textContent = '';
+
+  if (!username || username.length < 3) { msgBox.textContent = 'Benutzername braucht mind. 3 Zeichen.'; return; }
+  if (!password || password.length < 4) { msgBox.textContent = 'Passwort braucht mind. 4 Zeichen.'; return; }
+
+  document.getElementById('playBtn').disabled = true;
 
   socket = io();
+  socket.on('authError', (msg) => {
+    msgBox.textContent = msg;
+    document.getElementById('playBtn').disabled = false;
+  });
   socket.on('init', (data) => {
     myId = data.you; MAP = data.map; TILE = data.tile; CLASSES = data.classes;
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('hud').style.display = 'flex';
+    document.getElementById('hint').style.display = 'block';
+    document.getElementById('chatInput').style.display = 'block';
+    bindInput();
+    requestAnimationFrame(loop);
   });
   socket.on('state', (s) => { world = s; render(); });
   socket.on('hit', (h) => { hitFx.push({ ...h, life: 20 }); });
   socket.on('chat', (m) => addChat(m.name + ': ' + m.text));
 
-  socket.emit('join', { name, cls: selectedClass });
-  bindInput();
-  requestAnimationFrame(loop);
+  socket.emit('auth', { mode: authMode, username, password, name, cls: selectedClass });
 }
 
 // ---------------- Eingabe ----------------
