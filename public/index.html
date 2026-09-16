@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leo's Dungeon RPG</title>
+<style>
+  :root{
+    --bg:#0b0d12; --panel:#14181f; --accent:#e8c15a; --hp:#e74c3c; --xp:#3498db; --text:#eee;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:var(--bg); color:var(--text); font-family: 'Trebuchet MS', Verdana, sans-serif; overflow:hidden; height:100%; }
+  #gameCanvas { display:block; background:#000; image-rendering: pixelated; touch-action:none; }
+  #wrap { position:relative; width:100vw; height:100vh; display:flex; align-items:center; justify-content:center; }
+
+  #startScreen {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background: radial-gradient(circle at 50% 30%, #1c2230, #05060a);
+    z-index: 20;
+  }
+  .card {
+    background: var(--panel); border: 2px solid #2a2f3a; border-radius: 14px;
+    padding: 28px 32px; width: 360px; max-width: 90vw; box-shadow: 0 10px 40px rgba(0,0,0,.5);
+  }
+  .card h1 { margin: 0 0 4px; font-size: 22px; color: var(--accent); text-align:center; }
+  .card p.sub { margin: 0 0 18px; text-align:center; color:#9aa2b1; font-size:13px; }
+  input[type=text] {
+    width:100%; padding:10px 12px; border-radius:8px; border:1px solid #333a47;
+    background:#0d1117; color:#fff; font-size:14px; margin-bottom:14px;
+  }
+  .classGrid { display:flex; gap:8px; margin-bottom:18px; }
+  .classBtn {
+    flex:1; padding:12px 6px; border-radius:10px; border:2px solid #2a2f3a; background:#0d1117;
+    color:#ddd; cursor:pointer; text-align:center; font-size:13px; transition: all .15s;
+  }
+  .classBtn.selected { border-color: var(--accent); background:#241d0f; }
+  .classBtn .icon { font-size:22px; display:block; margin-bottom:4px; }
+  .classBtn small { color:#8892a0; display:block; margin-top:3px; font-size:10px; }
+  #playBtn {
+    width:100%; padding:12px; border:none; border-radius:10px; font-size:15px; font-weight:bold;
+    background: linear-gradient(180deg,#f0d27a,#c99a3a); color:#241a05; cursor:pointer;
+  }
+  #playBtn:disabled { opacity:.5; cursor:not-allowed; }
+
+  #hud { position:absolute; top:10px; left:10px; z-index:10; display:flex; flex-direction:column; gap:6px; pointer-events:none; }
+  .barBox { width:220px; background:#0009; border-radius:6px; padding:6px 8px; border:1px solid #ffffff22; }
+  .barLabel { display:flex; justify-content:space-between; font-size:11px; margin-bottom:3px; color:#ccc; }
+  .barOuter { height:9px; background:#000000aa; border-radius:5px; overflow:hidden; }
+  .barInner { height:100%; }
+  #statsRow { display:flex; gap:10px; margin-top:2px; font-size:12px; color:#e6d38a; }
+
+  #deathOverlay {
+    position:absolute; inset:0; background:#4a0000cc; display:none; align-items:center; justify-content:center;
+    flex-direction:column; z-index:15; color:#fff; font-size:22px; text-shadow: 0 2px 4px #000;
+  }
+
+  #chatBox {
+    position:absolute; bottom:10px; left:10px; width:280px; z-index:10;
+    display:flex; flex-direction:column-reverse; gap:2px; max-height:120px; overflow:hidden;
+    font-size:12px; pointer-events:none;
+  }
+  #chatBox div { background:#00000088; padding:2px 6px; border-radius:4px; }
+  #chatInput {
+    position:absolute; bottom:10px; left:300px; width:200px; z-index:10; padding:6px 8px;
+    border-radius:6px; border:1px solid #333a47; background:#0d1117cc; color:#fff; font-size:12px;
+  }
+  #hint { position:absolute; bottom:10px; right:10px; z-index:10; font-size:11px; color:#8892a0; text-align:right; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="hud" style="display:none;">
+    <div class="barBox">
+      <div class="barLabel"><span id="nameLbl">Held</span><span id="hpTxt">0/0</span></div>
+      <div class="barOuter"><div class="barInner" id="hpBar" style="background:var(--hp); width:100%;"></div></div>
+    </div>
+    <div class="barBox">
+      <div class="barLabel"><span>Level <span id="lvlTxt">1</span></span><span id="xpTxt">0/0</span></div>
+      <div class="barOuter"><div class="barInner" id="xpBar" style="background:var(--xp); width:0%;"></div></div>
+    </div>
+    <div id="statsRow">
+      <span>🪙 <span id="goldTxt">0</span></span>
+      <span>🧪 <span id="potionTxt">0</span> (E)</span>
+    </div>
+  </div>
+
+  <div id="chatBox"></div>
+  <input id="chatInput" placeholder="Enter zum Chatten..." style="display:none;">
+  <div id="hint" style="display:none;">WASD/Pfeile: Bewegen&nbsp;·&nbsp;Klick/Leertaste: Angriff&nbsp;·&nbsp;E: Trank</div>
+
+  <div id="deathOverlay"><div>💀 Du bist gefallen...</div><div style="font-size:13px; margin-top:8px; color:#eee;">Respawn in Kürze</div></div>
+
+  <div id="startScreen">
+    <div class="card">
+      <h1>⚔️ Leo's Dungeon</h1>
+      <p class="sub">Echtzeit Multiplayer Dungeon-RPG</p>
+      <input type="text" id="nameInput" placeholder="Dein Heldenname" maxlength="16">
+      <div class="classGrid">
+        <div class="classBtn selected" data-cls="krieger">
+          <span class="icon">🛡️</span>Krieger<small>Viel HP, Nahkampf</small>
+        </div>
+        <div class="classBtn" data-cls="magier">
+          <span class="icon">🔮</span>Magier<small>Fernkampf, fragil</small>
+        </div>
+        <div class="classBtn" data-cls="schurke">
+          <span class="icon">🗡️</span>Schurke<small>Schnell, Krit-Chance</small>
+        </div>
+      </div>
+      <button id="playBtn">Ins Dungeon!</button>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+let socket = null;
+let TILE = 32, MAP = [], myId = null, CLASSES = {};
+let world = { players: [], monsters: [], items: [], projectiles: [] };
+let selectedClass = 'krieger';
+let hitFx = [];
+
+// ---------------- Startscreen ----------------
+document.querySelectorAll('.classBtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.classBtn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedClass = btn.dataset.cls;
+  });
+});
+
+document.getElementById('playBtn').addEventListener('click', startGame);
+document.getElementById('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') startGame(); });
+
+function startGame() {
+  const name = document.getElementById('nameInput').value.trim() || 'Held';
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('hud').style.display = 'flex';
+  document.getElementById('hint').style.display = 'block';
+  document.getElementById('chatInput').style.display = 'block';
+
+  socket = io();
+  socket.on('init', (data) => {
+    myId = data.you; MAP = data.map; TILE = data.tile; CLASSES = data.classes;
+  });
+  socket.on('state', (s) => { world = s; render(); });
+  socket.on('hit', (h) => { hitFx.push({ ...h, life: 20 }); });
+  socket.on('chat', (m) => addChat(m.name + ': ' + m.text));
+
+  socket.emit('join', { name, cls: selectedClass });
+  bindInput();
+  requestAnimationFrame(loop);
+}
+
+// ---------------- Eingabe ----------------
+const keys = {};
+let aim = { x: 1, y: 0 };
+function bindInput() {
+  window.addEventListener('keydown', (e) => {
+    if (document.activeElement === chatInput) return;
+    keys[e.key.toLowerCase()] = true;
+    if (e.key === ' ') { e.preventDefault(); socket.emit('attack'); }
+    if (e.key.toLowerCase() === 'e') socket.emit('useItem');
+    sendInput();
+  });
+  window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; sendInput(); });
+  canvas.addEventListener('mousemove', (e) => {
+    const me = world.players.find(p => p.id === myId);
+    if (!me) return;
+    const rect = canvas.getBoundingClientRect();
+    const cx = canvas.width / 2, cy = canvas.height / 2;
+    aim.x = (e.clientX - rect.left) - cx;
+    aim.y = (e.clientY - rect.top) - cy;
+    sendInput();
+  });
+  canvas.addEventListener('mousedown', () => socket.emit('attack'));
+
+  const chatInput = document.getElementById('chatInput');
+  chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      if (chatInput.value.trim()) socket.emit('chat', chatInput.value.trim());
+      chatInput.value = '';
+      chatInput.blur();
+    }
+  });
+}
+
+function sendInput() {
+  if (!socket) return;
+  socket.emit('input', {
+    up: !!keys['w'] || !!keys['arrowup'],
+    down: !!keys['s'] || !!keys['arrowdown'],
+    left: !!keys['a'] || !!keys['arrowleft'],
+    right: !!keys['d'] || !!keys['arrowright'],
+    aimX: aim.x, aimY: aim.y
+  });
+}
+setInterval(sendInput, 100);
+
+function addChat(text) {
+  const box = document.getElementById('chatBox');
+  const div = document.createElement('div');
+  div.textContent = text;
+  box.prepend(div);
+  while (box.children.length > 6) box.removeChild(box.lastChild);
+}
+
+// ---------------- Rendering ----------------
+function loop() { render(); requestAnimationFrame(loop); }
+
+function render() {
+  if (!MAP.length) return;
+  const me = world.players.find(p => p.id === myId);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (!me) return;
+
+  const camX = me.x - canvas.width / 2;
+  const camY = me.y - canvas.height / 2;
+
+  // Map
+  const startCol = Math.max(0, Math.floor(camX / TILE));
+  const endCol = Math.min(MAP[0].length, Math.ceil((camX + canvas.width) / TILE));
+  const startRow = Math.max(0, Math.floor(camY / TILE));
+  const endRow = Math.min(MAP.length, Math.ceil((camY + canvas.height) / TILE));
+
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = startCol; x < endCol; x++) {
+      const wall = MAP[y][x] === '1';
+      const sx = x * TILE - camX, sy = y * TILE - camY;
+      if (wall) {
+        ctx.fillStyle = '#2b2f3a';
+        ctx.fillRect(sx, sy, TILE, TILE);
+        ctx.fillStyle = '#1c1f27';
+        ctx.fillRect(sx, sy, TILE, 4);
+      } else {
+        ctx.fillStyle = ((x + y) % 2 === 0) ? '#141821' : '#181c26';
+        ctx.fillRect(sx, sy, TILE, TILE);
+      }
+    }
+  }
+
+  // Items
+  for (const it of world.items) {
+    const sx = it.x - camX, sy = it.y - camY;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 7, 0, Math.PI * 2);
+    ctx.fillStyle = it.type === 'gold' ? '#f2c94c' : '#e05fd0';
+    ctx.fill();
+  }
+
+  // Monster
+  for (const m of world.monsters) {
+    const sx = m.x - camX, sy = m.y - camY;
+    ctx.beginPath();
+    ctx.arc(sx, sy, m.type === 'ork' ? 15 : 11, 0, Math.PI * 2);
+    ctx.fillStyle = m.type === 'ork' ? '#6b4a2f' : '#8f9c4a';
+    ctx.fill();
+    drawBar(sx - 16, sy - (m.type === 'ork' ? 26 : 20), 32, 4, m.hp / m.maxHp, '#e74c3c');
+  }
+
+  // Projektile
+  for (const pr of world.projectiles) {
+    ctx.beginPath();
+    ctx.arc(pr.x - camX, pr.y - camY, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#6fd1ff';
+    ctx.fill();
+  }
+
+  // Spieler
+  for (const p of world.players) {
+    if (p.dead) continue;
+    const sx = p.x - camX, sy = p.y - camY;
+    const color = (CLASSES[p.cls] && CLASSES[p.cls].color) || '#fff';
+    ctx.beginPath();
+    ctx.arc(sx, sy, 13, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#00000066'; ctx.stroke();
+
+    ctx.fillStyle = '#fff';
+    ctx.font = '11px Verdana';
+    ctx.textAlign = 'center';
+    ctx.fillText(p.name + ' (Lv' + p.level + ')', sx, sy - 20);
+    drawBar(sx - 18, sy - 16, 36, 4, p.hp / p.maxHp, '#e74c3c');
+  }
+
+  // Hit-Effekte
+  hitFx = hitFx.filter(h => h.life > 0);
+  for (const h of hitFx) {
+    ctx.fillStyle = `rgba(255,220,80,${h.life / 20})`;
+    ctx.font = 'bold 13px Verdana';
+    ctx.textAlign = 'center';
+    ctx.fillText('-' + Math.round(h.dmg), h.x - camX, h.y - camY - (20 - h.life));
+    h.life -= 1;
+  }
+
+  updateHud(me);
+}
+
+function drawBar(x, y, w, h, pct, color) {
+  pct = Math.max(0, Math.min(1, pct));
+  ctx.fillStyle = '#000000aa';
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, w * pct, h);
+}
+
+function updateHud(me) {
+  document.getElementById('nameLbl').textContent = me.name;
+  document.getElementById('hpTxt').textContent = Math.max(0, Math.round(me.hp)) + '/' + me.maxHp;
+  document.getElementById('hpBar').style.width = Math.max(0, (me.hp / me.maxHp) * 100) + '%';
+  document.getElementById('lvlTxt').textContent = me.level;
+  document.getElementById('xpTxt').textContent = me.xp + '/' + me.xpNext;
+  document.getElementById('xpBar').style.width = (me.xp / me.xpNext) * 100 + '%';
+  document.getElementById('goldTxt').textContent = me.gold;
+  document.getElementById('potionTxt').textContent = me.potions;
+  document.getElementById('deathOverlay').style.display = me.dead ? 'flex' : 'none';
+}
+</script>
+</body>
+</html>
