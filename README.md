@@ -1,3 +1,4 @@
+[README.md](https://github.com/user-attachments/files/32277220/README.md)
 # Leo's Dungeon RPG – Setup & Deployment
 
 Echtzeit-Multiplayer-Dungeon-RPG (Node.js + Socket.io Server, Canvas-Client).
@@ -13,7 +14,30 @@ npm start
 
 Dann im Browser: http://localhost:3000
 
-## 2. Kostenlos auf Render deployen
+## 2. Dauerhafte Accounts einrichten (MongoDB Atlas, kostenlos)
+
+Damit Login/Passwort und Spielstände (Level, Gold, Tränke) auch Server-Neustarts
+überleben, braucht es eine externe Datenbank. MongoDB Atlas hat eine kostenlose
+Stufe, die dafür locker reicht.
+
+1. Gehe auf https://www.mongodb.com/cloud/atlas/register und erstelle einen
+   kostenlosen Account.
+2. Beim Einrichten: **"M0 Free"**-Cluster auswählen (Region egal, z.B. Frankfurt).
+3. **Database Access** → neuen Datenbank-User anlegen (Benutzername + Passwort
+   notieren).
+4. **Network Access** → **"Allow access from anywhere"** (0.0.0.0/0) hinzufügen
+   (für den Anfang am einfachsten).
+5. Auf **"Connect"** beim Cluster → **"Drivers"** → die Connection-String-URL
+   kopieren, sieht etwa so aus:
+   `mongodb+srv://BENUTZER:PASSWORT@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority`
+6. Im String `BENUTZER` und `PASSWORT` durch deine echten Zugangsdaten ersetzen.
+7. Diesen fertigen String brauchst du gleich als Umgebungsvariable `MONGO_URI`
+   bei Render (siehe nächster Abschnitt).
+
+Ohne `MONGO_URI` läuft das Spiel trotzdem, aber Accounts/Fortschritt werden
+dann NICHT gespeichert.
+
+## 3. Kostenlos auf Render deployen
 
 1. Erstelle einen kostenlosen Account auf https://render.com
 2. Lade diesen Ordner (`dungeon-rpg/`) in ein neues GitHub-Repository hoch
@@ -23,7 +47,10 @@ Dann im Browser: http://localhost:3000
    - **Build Command:** `npm install`
    - **Start Command:** `npm start`
    - **Instance Type:** Free
-5. Deploy klicken. Nach ein paar Minuten bekommst du eine URL wie
+5. Unter **"Environment"** → **"Add Environment Variable"**:
+   - Key: `MONGO_URI`
+   - Value: der Connection-String aus Schritt 2 (MongoDB Atlas)
+6. Deploy klicken. Nach ein paar Minuten bekommst du eine URL wie
    `https://leo-dungeon-rpg.onrender.com`
 
 Hinweis: Der kostenlose Render-Plan "schläft" nach Inaktivität ein und
@@ -32,7 +59,7 @@ Hobby-Projekt völlig ok.
 
 Alternativen mit ähnlichem Ablauf: Railway.app, Fly.io.
 
-## 3. Auf leo.widescreen.ch einbinden
+## 4. Auf leo.widescreen.ch einbinden
 
 Da dein Haupthosting (METANET, per FileZilla) kein Node.js ausführen kann,
 bleibt die Website dort – du verlinkst nur auf den extern gehosteten Server.
