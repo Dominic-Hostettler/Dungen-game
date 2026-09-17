@@ -49,6 +49,7 @@ async function createAccount(username, passwordHash, cls) {
   const doc = {
     username, passwordHash, cls,
     level: 1, xp: 0, gold: 0, potions: 1,
+    upgDmg: 0, upgHp: 0, upgSpeed: 0,
     createdAt: new Date()
   };
   if (accountsCol) await accountsCol.insertOne(doc);
@@ -60,7 +61,10 @@ async function saveAccountProgress(p) {
   try {
     await accountsCol.updateOne(
       { username: p.username },
-      { $set: { level: p.level, xp: p.xp, gold: p.gold, potions: p.potions, cls: p.cls } }
+      { $set: {
+        level: p.level, xp: p.xp, gold: p.gold, potions: p.potions, cls: p.cls,
+        upgDmg: p.upgDmg, upgHp: p.upgHp, upgSpeed: p.upgSpeed
+      } }
     );
   } catch (err) {
     console.error('Speichern fehlgeschlagen fuer', p.username, err.message);
@@ -99,32 +103,58 @@ const MAP_ROWS = [
 const MAP_W = MAP_ROWS[0].length;
 const MAP_H = MAP_ROWS.length;
 
-function isWall(tx, ty) {
-  if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
-  return MAP_ROWS[ty][tx] === '1';
+function makeArena(w, h) {
+  const rows = [];
+  for (let y = 0; y < h; y++) {
+    let row = '';
+    for (let x = 0; x < w; x++) {
+      row += (x === 0 || y === 0 || x === w - 1 || y === h - 1) ? '1' : '0';
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+const ARENA_ROWS = makeArena(20, 13);
+const ARENA_W = ARENA_ROWS[0].length;
+const ARENA_H = ARENA_ROWS.length;
+
+function buildMapInfo(rows, w, h) {
+  function isWall(tx, ty) {
+    if (tx < 0 || ty < 0 || tx >= w || ty >= h) return true;
+    return rows[ty][tx] === '1';
+  }
+  function isFloor(tx, ty) { return !isWall(tx, ty); }
+  const floor = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (isFloor(x, y)) floor.push({ x, y });
+    }
+  }
+  return { rows, w, h, isWall, isFloor, floor };
 }
 
-function isFloor(tx, ty) {
-  return !isWall(tx, ty);
-}
+const DUNGEON = buildMapInfo(MAP_ROWS, MAP_W, MAP_H);
+const ARENA = buildMapInfo(ARENA_ROWS, ARENA_W, ARENA_H);
+function mapFor(zone) { return zone === 'arena' ? ARENA : DUNGEON; }
+
+function isWall(tx, ty) { return DUNGEON.isWall(tx, ty); }
+function isFloor(tx, ty) { return DUNGEON.isFloor(tx, ty); }
 
 // Alle begehbaren Tiles sammeln (fuer Spawns)
-const floorTiles = [];
-for (let y = 0; y < MAP_H; y++) {
-  for (let x = 0; x < MAP_W; x++) {
-    if (isFloor(x, y)) floorTiles.push({ x, y });
-  }
-}
-function randomFloorTile() {
-  return floorTiles[Math.floor(Math.random() * floorTiles.length)];
+const floorTiles = DUNGEON.floor;
+function randomFloorTile(zone) {
+  const m = mapFor(zone);
+  return m.floor[Math.floor(Math.random() * m.floor.length)];
 }
 const SPAWN_POINT = { x: 2 * TILE + TILE / 2, y: 1 * TILE + TILE / 2 };
+const ARENA_SPAWN_TILE = ARENA.floor[Math.floor(ARENA.floor.length / 2)];
+const ARENA_SPAWN = { x: ARENA_SPAWN_TILE.x * TILE + TILE / 2, y: ARENA_SPAWN_TILE.y * TILE + TILE / 2 };
 
 // ---------------- Klassen-Definitionen ----------------
 const CLASSES = {
   krieger: { name: 'Krieger', maxHp: 150, speed: 2.4, dmg: 18, range: 42, cooldown: 500, kind: 'melee', color: '#e74c3c' },
   magier:  { name: 'Magier',  maxHp: 80,  speed: 2.1, dmg: 24, range: 240, cooldown: 750, kind: 'ranged', color: '#3498db' },
-  schurke: { name: 'Schurke', maxHp: 100, speed: 3.0, dmg: 13, range: 36, cooldown: 320, kind: 'melee', color: '#2ecc71', crit: 0.25 },
+  schurke: { name: 'Schurke', maxHp: 100, speed: 3.0, dmg: 13, range: 36, cooldown: 320, kind: 'melee', color: '#2ecc71', crit: 0.25 }
 };
 
 function statsForLevel(clsKey, level) {
@@ -134,6 +164,25 @@ function statsForLevel(clsKey, level) {
     maxHp: def.maxHp + lvlBonus * 18,
     dmg: def.dmg + lvlBonus * 3
   };
+}
+
+function recomputeStats(p) {
+  const base = statsForLevel(p.cls, p.level);
+  p.maxHp = base.maxHp + p.upgHp * 15;
+  p.dmg = base.dmg + p.upgDmg * 2;
+  p.speed = CLASSES[p.cls].speed + p.upgSpeed * 0.12;
+  p.hp = Math.min(p.hp, p.maxHp);
+}
+
+const SHOP_ITEMS = {
+  potion: { label: 'Heiltrank', baseCost: 12, scale: 0, maxCount: null },
+  dmg: { label: 'Waffe schärfen (+2 Schaden)', baseCost: 25, scale: 20, maxCount: 10 },
+  hp: { label: 'Rüstung verstärken (+15 max. HP)', baseCost: 25, scale: 20, maxCount: 10 },
+  speed: { label: 'Leichtere Stiefel (+Tempo)', baseCost: 30, scale: 25, maxCount: 5 }
+};
+function shopCost(itemKey, currentCount) {
+  const def = SHOP_ITEMS[itemKey];
+  return def.baseCost + def.scale * currentCount;
 }
 
 // ---------------- Game-State ----------------
@@ -150,13 +199,13 @@ const MONSTER_TYPES = {
   goblin: { hp: 40, dmg: 8, speed: 1.3, xp: 15, range: 30, cooldown: 900, color: '#8e7c4d', radius: 12 },
   ork:    { hp: 95, dmg: 16, speed: 0.9, xp: 40, range: 34, cooldown: 1200, color: '#5b4636', radius: 16 }
 };
-const MAX_MONSTERS = 20;
+const MAX_MONSTERS = 14;
 
 function spawnMonster() {
   if (Object.keys(monsters).length >= MAX_MONSTERS) return;
   const type = Math.random() < 0.7 ? 'goblin' : 'ork';
   const def = MONSTER_TYPES[type];
-  const tile = randomFloorTile();
+  const tile = randomFloorTile('dungeon');
   const id = 'm' + (monsterIdCounter++);
   monsters[id] = {
     id, type,
@@ -190,28 +239,57 @@ function xpToNextLevel(level) {
   return 80 + level * 60;
 }
 
-function circleHitsWall(x, y, radius) {
+function circleHitsWall(mapInfo, x, y, radius) {
   const pts = [
     [x - radius, y - radius], [x + radius, y - radius],
     [x - radius, y + radius], [x + radius, y + radius]
   ];
   for (const [px, py] of pts) {
-    if (isWall(Math.floor(px / TILE), Math.floor(py / TILE))) return true;
+    if (mapInfo.isWall(Math.floor(px / TILE), Math.floor(py / TILE))) return true;
   }
   return false;
 }
 
-function tryMove(entity, dx, dy, radius) {
+function tryMove(mapInfo, entity, dx, dy, radius) {
   const nx = entity.x + dx;
   const ny = entity.y + dy;
-  if (!circleHitsWall(nx, entity.y, radius)) entity.x = nx;
-  if (!circleHitsWall(entity.x, ny, radius)) entity.y = ny;
+  if (!circleHitsWall(mapInfo, nx, entity.y, radius)) entity.x = nx;
+  if (!circleHitsWall(mapInfo, entity.x, ny, radius)) entity.y = ny;
+}
+
+// ---------------- Truhen ----------------
+const CHEST_COUNT = 5;
+const CHEST_RESPAWN_MS = 90000;
+const chests = {};
+(function initChests() {
+  const step = Math.floor(floorTiles.length / (CHEST_COUNT + 1));
+  for (let i = 1; i <= CHEST_COUNT; i++) {
+    const tile = floorTiles[step * i];
+    const id = 'c' + i;
+    chests[id] = {
+      id,
+      x: tile.x * TILE + TILE / 2,
+      y: tile.y * TILE + TILE / 2,
+      looted: false,
+      respawnAt: 0
+    };
+  }
+})();
+
+function applyPvpDamage(target, dmg, attacker) {
+  target.hp -= dmg;
+  io.emit('hit', { x: target.x, y: target.y, dmg });
+  if (target.hp <= 0 && !target.dead) {
+    target.dead = true;
+    setTimeout(() => respawnPlayer(target), 2000);
+  }
 }
 
 function respawnPlayer(p) {
-  p.x = SPAWN_POINT.x;
-  p.y = SPAWN_POINT.y;
-  p.hp = Math.max(1, Math.floor(p.maxHp * 0.5));
+  const sp = p.zone === 'arena' ? ARENA_SPAWN : SPAWN_POINT;
+  p.x = sp.x;
+  p.y = sp.y;
+  p.hp = p.zone === 'arena' ? p.maxHp : Math.max(1, Math.floor(p.maxHp * 0.5));
   p.dead = false;
 }
 
@@ -219,8 +297,7 @@ function levelUp(p) {
   p.level += 1;
   p.xp -= p.xpNext;
   p.xpNext = xpToNextLevel(p.level);
-  p.maxHp += 18;
-  p.dmg += 3;
+  recomputeStats(p);
   p.hp = p.maxHp;
   saveAccountProgress(p);
 }
@@ -268,6 +345,7 @@ io.on('connection', (socket) => {
         username,
         name: name || username,
         cls: account.cls,
+        zone: 'dungeon',
         x: SPAWN_POINT.x,
         y: SPAWN_POINT.y,
         hp: stats.maxHp,
@@ -279,14 +357,20 @@ io.on('connection', (socket) => {
         xpNext: xpToNextLevel(account.level),
         gold: account.gold,
         potions: account.potions,
+        upgDmg: account.upgDmg || 0,
+        upgHp: account.upgHp || 0,
+        upgSpeed: account.upgSpeed || 0,
         lastAttack: 0,
         dead: false,
         input: { up: false, down: false, left: false, right: false, aimX: 0, aimY: 0 }
       };
+      recomputeStats(players[socket.id]);
+      players[socket.id].hp = players[socket.id].maxHp;
 
       socket.emit('init', {
         you: socket.id,
         map: MAP_ROWS,
+        arenaMap: ARENA_ROWS,
         tile: TILE,
         classes: CLASSES
       });
@@ -313,6 +397,34 @@ io.on('connection', (socket) => {
     if (now - p.lastAttack < def.cooldown) return;
     p.lastAttack = now;
 
+    if (p.zone === 'arena') {
+      // PvP: Gegner sind andere Spieler in der Arena
+      if (def.kind === 'melee') {
+        let closest = null, closestDist = Infinity;
+        for (const id in players) {
+          const other = players[id];
+          if (id === p.id || other.zone !== 'arena' || other.dead) continue;
+          const d = dist(p.x, p.y, other.x, other.y);
+          if (d < def.range && d < closestDist) { closest = other; closestDist = d; }
+        }
+        if (closest) {
+          let dmg = p.dmg;
+          if (def.crit && Math.random() < def.crit) dmg *= 2;
+          applyPvpDamage(closest, dmg, p);
+        }
+      } else {
+        const id = 'pr' + (projectileIdCounter++);
+        const angle = Math.atan2(p.input.aimY, p.input.aimX) || 0;
+        projectiles[id] = {
+          id, ownerId: p.id, zone: 'arena',
+          x: p.x, y: p.y,
+          vx: Math.cos(angle) * 6, vy: Math.sin(angle) * 6,
+          dmg: p.dmg, life: 60
+        };
+      }
+      return;
+    }
+
     if (def.kind === 'melee') {
       let closest = null, closestDist = Infinity;
       for (const id in monsters) {
@@ -335,12 +447,46 @@ io.on('connection', (socket) => {
       const id = 'pr' + (projectileIdCounter++);
       const angle = Math.atan2(p.input.aimY, p.input.aimX) || 0;
       projectiles[id] = {
-        id, ownerId: p.id,
+        id, ownerId: p.id, zone: 'dungeon',
         x: p.x, y: p.y,
         vx: Math.cos(angle) * 6, vy: Math.sin(angle) * 6,
         dmg: p.dmg, life: 60
       };
     }
+  });
+
+  socket.on('joinArena', () => {
+    const p = players[socket.id];
+    if (!p || p.dead) return;
+    p.zone = 'arena';
+    p.x = ARENA_SPAWN.x; p.y = ARENA_SPAWN.y;
+    p.hp = p.maxHp;
+  });
+
+  socket.on('leaveArena', () => {
+    const p = players[socket.id];
+    if (!p) return;
+    p.zone = 'dungeon';
+    p.x = SPAWN_POINT.x; p.y = SPAWN_POINT.y;
+    p.hp = p.maxHp;
+    p.dead = false;
+  });
+
+  socket.on('openChest', (data) => {
+    const p = players[socket.id];
+    if (!p || p.dead || p.zone !== 'dungeon') return;
+    const chest = chests[data && data.chestId];
+    if (!chest || chest.looted) return;
+    if (dist(p.x, p.y, chest.x, chest.y) > 44) return;
+
+    chest.looted = true;
+    chest.respawnAt = Date.now() + CHEST_RESPAWN_MS;
+    const gold = 20 + Math.floor(Math.random() * 40);
+    const gotPotion = Math.random() < 0.35;
+    p.gold += gold;
+    if (gotPotion) p.potions += 1;
+    socket.emit('lootResult', { gold, potion: gotPotion });
+    saveAccountProgress(p);
   });
 
   socket.on('useItem', () => {
@@ -350,6 +496,33 @@ io.on('connection', (socket) => {
       p.potions -= 1;
       p.hp = Math.min(p.maxHp, p.hp + Math.floor(p.maxHp * 0.4));
     }
+  });
+
+  socket.on('buyItem', (data) => {
+    const p = players[socket.id];
+    if (!p || p.dead) return;
+    const type = data && data.type;
+    const def = SHOP_ITEMS[type];
+    if (!def) return;
+
+    if (type === 'potion') {
+      const cost = shopCost('potion', 0);
+      if (p.gold < cost) return socket.emit('shopError', 'Nicht genug Gold.');
+      p.gold -= cost;
+      p.potions += 1;
+    } else {
+      const countKey = type === 'dmg' ? 'upgDmg' : (type === 'hp' ? 'upgHp' : 'upgSpeed');
+      const current = p[countKey];
+      if (def.maxCount !== null && current >= def.maxCount) {
+        return socket.emit('shopError', 'Maximum für dieses Upgrade erreicht.');
+      }
+      const cost = shopCost(type, current);
+      if (p.gold < cost) return socket.emit('shopError', 'Nicht genug Gold.');
+      p.gold -= cost;
+      p[countKey] += 1;
+      recomputeStats(p);
+    }
+    saveAccountProgress(p);
   });
 
   socket.on('chat', (msg) => {
@@ -389,8 +562,9 @@ function tick() {
       const len = Math.hypot(dx, dy);
       dx = (dx / len) * p.speed * dtScale;
       dy = (dy / len) * p.speed * dtScale;
-      tryMove(p, dx, dy, 12);
+      tryMove(mapFor(p.zone), p, dx, dy, 12);
     }
+    if (p.zone !== 'dungeon') continue;
     // Items einsammeln
     for (const iid in items) {
       const it = items[iid];
@@ -402,13 +576,19 @@ function tick() {
     }
   }
 
+  // Truhen: respawnen nach Cooldown
+  for (const cid in chests) {
+    const c = chests[cid];
+    if (c.looted && Date.now() > c.respawnAt) c.looted = false;
+  }
+
   // Monster-KI
   for (const id in monsters) {
     const m = monsters[id];
     let target = null, targetDist = Infinity;
     for (const pid in players) {
       const p = players[pid];
-      if (p.dead) continue;
+      if (p.dead || p.zone !== 'dungeon') continue;
       const d = dist(m.x, m.y, p.x, p.y);
       if (d < 180 && d < targetDist) { target = p; targetDist = d; }
     }
@@ -416,7 +596,7 @@ function tick() {
       const def = MONSTER_TYPES[m.type];
       if (targetDist > def.range) {
         const angle = Math.atan2(target.y - m.y, target.x - m.x);
-        tryMove(m, Math.cos(angle) * def.speed, Math.sin(angle) * def.speed, def.radius);
+        tryMove(DUNGEON, m, Math.cos(angle) * def.speed, Math.sin(angle) * def.speed, def.radius);
       } else {
         const now = Date.now();
         if (now - m.lastAttack > def.cooldown) {
@@ -433,7 +613,7 @@ function tick() {
       const d = dist(m.x, m.y, m.homeX, m.homeY);
       if (d > 10) {
         const angle = Math.atan2(m.homeY - m.y, m.homeX - m.x);
-        tryMove(m, Math.cos(angle) * 0.6, Math.sin(angle) * 0.6, MONSTER_TYPES[m.type].radius);
+        tryMove(DUNGEON, m, Math.cos(angle) * 0.6, Math.sin(angle) * 0.6, MONSTER_TYPES[m.type].radius);
       }
     }
   }
@@ -445,20 +625,35 @@ function tick() {
     pr.y += pr.vy;
     pr.life -= 1;
     let hitSomething = false;
-    if (isWall(Math.floor(pr.x / TILE), Math.floor(pr.y / TILE))) hitSomething = true;
-    for (const mid in monsters) {
-      const m = monsters[mid];
-      if (dist(pr.x, pr.y, m.x, m.y) < 16) {
-        m.hp -= pr.dmg;
-        io.emit('hit', { x: m.x, y: m.y, dmg: pr.dmg });
-        if (m.hp <= 0) {
-          spawnItem(m.x, m.y);
+    const pMap = mapFor(pr.zone);
+    if (pMap.isWall(Math.floor(pr.x / TILE), Math.floor(pr.y / TILE))) hitSomething = true;
+
+    if (!hitSomething && pr.zone === 'arena') {
+      for (const pid in players) {
+        const other = players[pid];
+        if (pid === pr.ownerId || other.zone !== 'arena' || other.dead) continue;
+        if (dist(pr.x, pr.y, other.x, other.y) < 16) {
           const owner = players[pr.ownerId];
-          if (owner) grantXp(owner, MONSTER_TYPES[m.type].xp);
-          delete monsters[mid];
+          applyPvpDamage(other, pr.dmg, owner);
+          hitSomething = true;
+          break;
         }
-        hitSomething = true;
-        break;
+      }
+    } else if (!hitSomething) {
+      for (const mid in monsters) {
+        const m = monsters[mid];
+        if (dist(pr.x, pr.y, m.x, m.y) < 16) {
+          m.hp -= pr.dmg;
+          io.emit('hit', { x: m.x, y: m.y, dmg: pr.dmg });
+          if (m.hp <= 0) {
+            spawnItem(m.x, m.y);
+            const owner = players[pr.ownerId];
+            if (owner) grantXp(owner, MONSTER_TYPES[m.type].xp);
+            delete monsters[mid];
+          }
+          hitSomething = true;
+          break;
+        }
       }
     }
     if (hitSomething || pr.life <= 0) delete projectiles[id];
@@ -470,15 +665,17 @@ function tick() {
 function broadcastState() {
   const state = {
     players: Object.values(players).map(p => ({
-      id: p.id, name: p.name, cls: p.cls, x: p.x, y: p.y,
+      id: p.id, name: p.name, cls: p.cls, x: p.x, y: p.y, zone: p.zone,
       hp: p.hp, maxHp: p.maxHp, level: p.level, xp: p.xp, xpNext: p.xpNext,
-      gold: p.gold, potions: p.potions, dead: p.dead
+      gold: p.gold, potions: p.potions, dead: p.dead,
+      upgDmg: p.upgDmg, upgHp: p.upgHp, upgSpeed: p.upgSpeed
     })),
     monsters: Object.values(monsters).map(m => ({
       id: m.id, type: m.type, x: m.x, y: m.y, hp: m.hp, maxHp: m.maxHp
     })),
     items: Object.values(items),
-    projectiles: Object.values(projectiles).map(pr => ({ id: pr.id, x: pr.x, y: pr.y }))
+    chests: Object.values(chests).map(c => ({ id: c.id, x: c.x, y: c.y, looted: c.looted })),
+    projectiles: Object.values(projectiles).map(pr => ({ id: pr.id, x: pr.x, y: pr.y, zone: pr.zone }))
   };
   io.emit('state', state);
 }
