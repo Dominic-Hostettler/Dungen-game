@@ -65,6 +65,113 @@
     border-radius:6px; border:1px solid #333a47; background:#0d1117cc; color:#fff; font-size:12px;
   }
   #hint { position:absolute; bottom:10px; right:10px; z-index:10; font-size:11px; color:#8892a0; text-align:right; }
+
+  #shopPanel {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    background: var(--panel); border:2px solid #2a2f3a; border-radius:14px;
+    padding:22px 26px; width:340px; max-width:90vw; z-index:25; display:none;
+    box-shadow: 0 10px 40px rgba(0,0,0,.6);
+  }
+  #shopPanel h2 { margin:0 0 4px; color:var(--accent); font-size:19px; text-align:center; }
+  #shopPanel p.sub { margin:0 0 14px; text-align:center; color:#9aa2b1; font-size:12px; }
+  .shopItem {
+    display:flex; justify-content:space-between; align-items:center;
+    background:#0d1117; border:1px solid #2a2f3a; border-radius:8px;
+    padding:10px 12px; margin-bottom:8px;
+  }
+  .shopItem .info { font-size:12px; }
+  .shopItem .info .cnt { color:#8892a0; font-size:11px; }
+  .shopItem button {
+    padding:6px 10px; border:none; border-radius:6px; background:linear-gradient(180deg,#f0d27a,#c99a3a);
+    color:#241a05; font-weight:bold; cursor:pointer; font-size:12px;
+  }
+  .shopItem button:disabled { opacity:.4; cursor:not-allowed; }
+  #shopMsg { min-height:16px; color:#ff8080; font-size:12px; text-align:center; margin-top:4px; }
+  #shopClose {
+    width:100%; margin-top:8px; padding:8px; border:none; border-radius:8px;
+    background:#2a2f3a; color:#ddd; cursor:pointer; font-size:12px;
+  }
+
+  #menuBtn {
+    position:absolute; top:10px; right:10px; z-index:12; width:40px; height:40px;
+    border-radius:10px; border:1px solid #ffffff22; background:#0009; color:#eee;
+    font-size:18px; cursor:pointer; display:none; align-items:center; justify-content:center;
+  }
+  #menuPanel {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    background: var(--panel); border:2px solid #2a2f3a; border-radius:14px;
+    padding:20px; width:280px; max-width:88vw; z-index:26; display:none;
+    box-shadow: 0 10px 40px rgba(0,0,0,.6);
+  }
+  #menuPanel h2 { margin:0 0 14px; color:var(--accent); font-size:18px; text-align:center; }
+  .menuOption {
+    width:100%; padding:11px; margin-bottom:8px; border-radius:8px; border:1px solid #2a2f3a;
+    background:#0d1117; color:#eee; cursor:pointer; font-size:13px; text-align:left;
+  }
+  .menuOption:hover { border-color: var(--accent); }
+  #menuOptionLeave { color:#ff8a8a; }
+
+  #pvpPanel {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    background: var(--panel); border:2px solid #2a2f3a; border-radius:14px;
+    padding:22px 24px; width:320px; max-width:88vw; z-index:26; display:none;
+    box-shadow: 0 10px 40px rgba(0,0,0,.6);
+  }
+  #pvpPanel h2 { margin:0 0 4px; color:var(--accent); font-size:18px; text-align:center; }
+  #pvpPanel p.sub { margin:0 0 14px; text-align:center; color:#9aa2b1; font-size:12px; }
+  #pvpStatus { text-align:center; font-size:13px; margin-bottom:12px; color:#e6d38a; }
+  #pvpToggleBtn {
+    width:100%; padding:11px; border:none; border-radius:8px; font-size:14px; font-weight:bold;
+    background: linear-gradient(180deg,#f0d27a,#c99a3a); color:#241a05; cursor:pointer; margin-bottom:8px;
+  }
+  #pvpList { font-size:12px; color:#9aa2b1; margin-bottom:10px; max-height:100px; overflow-y:auto; }
+  #pvpClose {
+    width:100%; padding:8px; border:none; border-radius:8px;
+    background:#2a2f3a; color:#ddd; cursor:pointer; font-size:12px;
+  }
+
+  #interactBtn {
+    position:absolute; bottom:110px; left:50%; transform:translateX(-50%);
+    z-index:12; padding:10px 16px; border-radius:20px; border:none;
+    background: linear-gradient(180deg,#f0d27a,#c99a3a); color:#241a05; font-weight:bold;
+    font-size:13px; cursor:pointer; display:none;
+  }
+
+  #lootToast {
+    position:absolute; top:70px; left:50%; transform:translateX(-50%);
+    z-index:14; background:#1a1408ee; border:1px solid var(--accent); color:var(--accent);
+    padding:8px 16px; border-radius:8px; font-size:13px; font-weight:bold; display:none;
+  }
+
+  #zoneLabel {
+    position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:10;
+    font-size:12px; padding:4px 12px; border-radius:12px; background:#0009; display:none;
+  }
+  #zoneLabel.arena { color:#ff8a8a; border:1px solid #ff8a8a55; }
+  #zoneLabel.dungeon { color:#9ad1ff; border:1px solid #9ad1ff55; }
+
+  /* ---- Mobile Steuerung ---- */
+  #mobileControls { display:none; }
+  .touch-active #mobileControls { display:block; }
+  .touch-active #hint { display:none !important; }
+
+  #joyBase {
+    position:absolute; bottom:26px; left:26px; width:110px; height:110px; border-radius:50%;
+    background:#ffffff14; border:2px solid #ffffff33; z-index:13; touch-action:none;
+  }
+  #joyStick {
+    position:absolute; top:50%; left:50%; width:48px; height:48px; margin:-24px;
+    border-radius:50%; background:#ffffff44; border:2px solid #fff5; pointer-events:none;
+  }
+  #mobileActions {
+    position:absolute; bottom:30px; right:20px; z-index:13; display:flex; flex-direction:column; gap:10px; align-items:center;
+  }
+  .mBtn {
+    width:64px; height:64px; border-radius:50%; border:2px solid #ffffff33; color:#fff;
+    font-size:22px; display:flex; align-items:center; justify-content:center; touch-action:none;
+  }
+  #mAttack { background:#7a2e2e99; }
+  #mPotion { background:#2e5c3299; font-size:18px; }
 </style>
 </head>
 <body>
@@ -88,7 +195,45 @@
 
   <div id="chatBox"></div>
   <input id="chatInput" placeholder="Enter zum Chatten..." style="display:none;">
-  <div id="hint" style="display:none;">WASD/Pfeile: Bewegen&nbsp;·&nbsp;Klick/Leertaste: Angriff&nbsp;·&nbsp;E: Trank</div>
+  <div id="hint" style="display:none;">WASD/Pfeile: Bewegen&nbsp;·&nbsp;Klick/Leertaste: Angriff&nbsp;·&nbsp;E: Trank&nbsp;·&nbsp;B: Shop&nbsp;·&nbsp;F: Truhe&nbsp;·&nbsp;Esc: Menü</div>
+
+  <button id="menuBtn">☰</button>
+  <div id="zoneLabel"></div>
+  <div id="lootToast"></div>
+  <button id="interactBtn">📦 Truhe öffnen (F)</button>
+
+  <div id="menuPanel">
+    <h2>Menü</h2>
+    <button class="menuOption" id="menuOptionShop">🏪 Shop</button>
+    <button class="menuOption" id="menuOptionPvp">⚔️ PvP-Lobby</button>
+    <button class="menuOption" id="menuOptionClose">▶️ Weiterspielen</button>
+    <button class="menuOption" id="menuOptionLeave">🚪 Spiel verlassen</button>
+  </div>
+
+  <div id="pvpPanel">
+    <h2>⚔️ PvP-Lobby</h2>
+    <p class="sub">Kämpfe gegen andere Spieler in der Arena. Kein Verlust beim Sterben – nur Ehre!</p>
+    <div id="pvpStatus">Du bist im: Dungeon</div>
+    <button id="pvpToggleBtn">Arena betreten</button>
+    <div id="pvpList"></div>
+    <button id="pvpClose">Schliessen</button>
+  </div>
+
+  <div id="shopPanel">
+    <h2>🏪 Shop</h2>
+    <p class="sub">Gold: <span id="shopGold">0</span></p>
+    <div id="shopItems"></div>
+    <div id="shopMsg"></div>
+    <button id="shopClose">Schliessen</button>
+  </div>
+
+  <div id="mobileControls">
+    <div id="joyBase"><div id="joyStick"></div></div>
+    <div id="mobileActions">
+      <div class="mBtn" id="mAttack">⚔️</div>
+      <div class="mBtn" id="mPotion">🧪</div>
+    </div>
+  </div>
 
   <div id="deathOverlay"><div>💀 Du bist gefallen...</div><div style="font-size:13px; margin-top:8px; color:#eee;">Respawn in Kürze</div></div>
 
@@ -131,10 +276,98 @@ function resize() { canvas.width = window.innerWidth; canvas.height = window.inn
 window.addEventListener('resize', resize); resize();
 
 let socket = null;
-let TILE = 32, MAP = [], myId = null, CLASSES = {};
-let world = { players: [], monsters: [], items: [], projectiles: [] };
+let TILE = 32, MAP = [], ARENA_MAP = [], myId = null, CLASSES = {};
+let world = { players: [], monsters: [], items: [], chests: [], projectiles: [] };
 let selectedClass = 'krieger';
 let hitFx = [];
+let currentZone = 'dungeon';
+let nearestChestId = null;
+
+const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+if (isTouchDevice) document.body.classList.add('touch-active');
+
+const SHOP_ITEMS = {
+  potion: { label: '🧪 Heiltrank', baseCost: 12, scale: 0, maxCount: null },
+  dmg:    { label: '⚔️ Waffe schärfen (+2 Schaden)', baseCost: 25, scale: 20, maxCount: 10 },
+  hp:     { label: '🛡️ Rüstung verstärken (+15 max. HP)', baseCost: 25, scale: 20, maxCount: 10 },
+  speed:  { label: '👢 Leichtere Stiefel (+Tempo)', baseCost: 30, scale: 25, maxCount: 5 }
+};
+function shopCostClient(key, count) {
+  const d = SHOP_ITEMS[key];
+  return d.baseCost + d.scale * count;
+}
+let shopOpen = false;
+function toggleShop(force) {
+  shopOpen = (typeof force === 'boolean') ? force : !shopOpen;
+  document.getElementById('shopPanel').style.display = shopOpen ? 'block' : 'none';
+  if (shopOpen) renderShop();
+}
+function renderShop() {
+  const me = world.players.find(p => p.id === myId);
+  if (!me) return;
+  document.getElementById('shopGold').textContent = me.gold;
+  const box = document.getElementById('shopItems');
+  box.innerHTML = '';
+  const countKeys = { potion: null, dmg: 'upgDmg', hp: 'upgHp', speed: 'upgSpeed' };
+  for (const key in SHOP_ITEMS) {
+    const def = SHOP_ITEMS[key];
+    const count = countKeys[key] ? (me[countKeys[key]] || 0) : 0;
+    const maxedOut = def.maxCount !== null && count >= def.maxCount;
+    const cost = shopCostClient(key, count);
+    const row = document.createElement('div');
+    row.className = 'shopItem';
+    row.innerHTML = `<div class="info">${def.label}${countKeys[key] ? `<div class="cnt">Stufe ${count}${def.maxCount ? '/' + def.maxCount : ''}</div>` : ''}</div>
+      <button ${maxedOut ? 'disabled' : ''} data-key="${key}">${maxedOut ? 'Max' : cost + '🪙'}</button>`;
+    box.appendChild(row);
+  }
+  box.querySelectorAll('button[data-key]').forEach(btn => {
+    btn.addEventListener('click', () => socket.emit('buyItem', { type: btn.dataset.key }));
+  });
+}
+document.getElementById('shopClose').addEventListener('click', () => toggleShop(false));
+
+// ---------------- Menü ----------------
+let menuOpen = false;
+function toggleMenu(force) {
+  menuOpen = (typeof force === 'boolean') ? force : !menuOpen;
+  document.getElementById('menuPanel').style.display = menuOpen ? 'block' : 'none';
+}
+document.getElementById('menuBtn').addEventListener('click', () => toggleMenu());
+document.getElementById('menuOptionClose').addEventListener('click', () => toggleMenu(false));
+document.getElementById('menuOptionShop').addEventListener('click', () => { toggleMenu(false); toggleShop(true); });
+document.getElementById('menuOptionPvp').addEventListener('click', () => { toggleMenu(false); togglePvpPanel(true); });
+document.getElementById('menuOptionLeave').addEventListener('click', () => {
+  if (confirm('Spiel wirklich verlassen?')) {
+    if (socket) socket.disconnect();
+    location.reload();
+  }
+});
+
+// ---------------- PvP-Lobby ----------------
+let pvpOpen = false;
+function togglePvpPanel(force) {
+  pvpOpen = (typeof force === 'boolean') ? force : !pvpOpen;
+  document.getElementById('pvpPanel').style.display = pvpOpen ? 'block' : 'none';
+  if (pvpOpen) renderPvpPanel();
+}
+function renderPvpPanel() {
+  const me = world.players.find(p => p.id === myId);
+  if (!me) return;
+  document.getElementById('pvpStatus').textContent = 'Du bist im: ' + (me.zone === 'arena' ? 'Arena ⚔️' : 'Dungeon 🏰');
+  document.getElementById('pvpToggleBtn').textContent = me.zone === 'arena' ? 'Arena verlassen' : 'Arena betreten';
+  const others = world.players.filter(p => p.id !== myId && p.zone === 'arena');
+  const list = document.getElementById('pvpList');
+  list.innerHTML = others.length
+    ? 'Aktuell in der Arena: ' + others.map(p => p.name + ' (Lv' + p.level + ')').join(', ')
+    : 'Aktuell ist niemand in der Arena.';
+}
+document.getElementById('pvpToggleBtn').addEventListener('click', () => {
+  const me = world.players.find(p => p.id === myId);
+  if (!me) return;
+  socket.emit(me.zone === 'arena' ? 'leaveArena' : 'joinArena');
+  setTimeout(renderPvpPanel, 150);
+});
+document.getElementById('pvpClose').addEventListener('click', () => togglePvpPanel(false));
 
 // ---------------- Startscreen ----------------
 let authMode = 'login';
@@ -181,17 +414,36 @@ function startGame() {
     document.getElementById('playBtn').disabled = false;
   });
   socket.on('init', (data) => {
-    myId = data.you; MAP = data.map; TILE = data.tile; CLASSES = data.classes;
+    myId = data.you; MAP = data.map; ARENA_MAP = data.arenaMap; TILE = data.tile; CLASSES = data.classes;
     document.getElementById('startScreen').style.display = 'none';
     document.getElementById('hud').style.display = 'flex';
     document.getElementById('hint').style.display = 'block';
     document.getElementById('chatInput').style.display = 'block';
+    document.getElementById('menuBtn').style.display = 'flex';
+    document.getElementById('zoneLabel').style.display = 'block';
     bindInput();
     requestAnimationFrame(loop);
   });
-  socket.on('state', (s) => { world = s; render(); });
+  socket.on('state', (s) => {
+    world = s;
+    render();
+    if (shopOpen) renderShop();
+    if (pvpOpen) renderPvpPanel();
+  });
   socket.on('hit', (h) => { hitFx.push({ ...h, life: 20 }); });
   socket.on('chat', (m) => addChat(m.name + ': ' + m.text));
+  socket.on('shopError', (msg) => {
+    const el = document.getElementById('shopMsg');
+    el.textContent = msg;
+    setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 2500);
+  });
+  socket.on('lootResult', (r) => {
+    const toast = document.getElementById('lootToast');
+    toast.textContent = '📦 +' + r.gold + ' Gold' + (r.potion ? ' · +1 Trank' : '');
+    toast.style.display = 'block';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { toast.style.display = 'none'; }, 2200);
+  });
 
   socket.emit('auth', { mode: authMode, username, password, name, cls: selectedClass });
 }
@@ -199,12 +451,16 @@ function startGame() {
 // ---------------- Eingabe ----------------
 const keys = {};
 let aim = { x: 1, y: 0 };
+let joyVec = { x: 0, y: 0 };
 function bindInput() {
   window.addEventListener('keydown', (e) => {
     if (document.activeElement === chatInput) return;
     keys[e.key.toLowerCase()] = true;
     if (e.key === ' ') { e.preventDefault(); socket.emit('attack'); }
     if (e.key.toLowerCase() === 'e') socket.emit('useItem');
+    if (e.key.toLowerCase() === 'b') toggleShop();
+    if (e.key.toLowerCase() === 'f') tryOpenNearestChest();
+    if (e.key === 'Escape') toggleMenu();
     sendInput();
   });
   window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; sendInput(); });
@@ -227,15 +483,68 @@ function bindInput() {
       chatInput.blur();
     }
   });
+
+  document.getElementById('interactBtn').addEventListener('click', tryOpenNearestChest);
+
+  // ---------------- Mobile: virtueller Joystick ----------------
+  const joyBase = document.getElementById('joyBase');
+  const joyStick = document.getElementById('joyStick');
+  let joyActive = false, joyOrigin = { x: 0, y: 0 };
+
+  function joyPos(e) {
+    const t = e.touches ? e.touches[0] : e;
+    return { x: t.clientX, y: t.clientY };
+  }
+  joyBase.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    joyActive = true;
+    const rect = joyBase.getBoundingClientRect();
+    joyOrigin = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  }, { passive: false });
+  joyBase.addEventListener('touchmove', (e) => {
+    if (!joyActive) return;
+    e.preventDefault();
+    const p = joyPos(e);
+    let dx = p.x - joyOrigin.x, dy = p.y - joyOrigin.y;
+    const max = 40;
+    const len = Math.hypot(dx, dy) || 1;
+    if (len > max) { dx = (dx / len) * max; dy = (dy / len) * max; }
+    joyStick.style.transform = `translate(${dx}px, ${dy}px)`;
+    joyVec = { x: dx / max, y: dy / max };
+    aim.x = dx; aim.y = dy;
+    sendInput();
+  }, { passive: false });
+  function joyEnd(e) {
+    if (!joyActive) return;
+    e.preventDefault();
+    joyActive = false;
+    joyVec = { x: 0, y: 0 };
+    joyStick.style.transform = 'translate(0,0)';
+    sendInput();
+  }
+  joyBase.addEventListener('touchend', joyEnd, { passive: false });
+  joyBase.addEventListener('touchcancel', joyEnd, { passive: false });
+
+  // ---------------- Mobile: Aktions-Buttons ----------------
+  const mAttack = document.getElementById('mAttack');
+  const mPotion = document.getElementById('mPotion');
+  mAttack.addEventListener('touchstart', (e) => { e.preventDefault(); socket.emit('attack'); }, { passive: false });
+  mPotion.addEventListener('touchstart', (e) => { e.preventDefault(); socket.emit('useItem'); }, { passive: false });
+}
+
+function tryOpenNearestChest() {
+  if (!socket || !nearestChestId) return;
+  socket.emit('openChest', { chestId: nearestChestId });
 }
 
 function sendInput() {
   if (!socket) return;
+  const jThresh = 0.3;
   socket.emit('input', {
-    up: !!keys['w'] || !!keys['arrowup'],
-    down: !!keys['s'] || !!keys['arrowdown'],
-    left: !!keys['a'] || !!keys['arrowleft'],
-    right: !!keys['d'] || !!keys['arrowright'],
+    up: !!keys['w'] || !!keys['arrowup'] || (joyVec.y < -jThresh),
+    down: !!keys['s'] || !!keys['arrowdown'] || (joyVec.y > jThresh),
+    left: !!keys['a'] || !!keys['arrowleft'] || (joyVec.x < -jThresh),
+    right: !!keys['d'] || !!keys['arrowright'] || (joyVec.x > jThresh),
     aimX: aim.x, aimY: aim.y
   });
 }
@@ -259,61 +568,87 @@ function render() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   if (!me) return;
 
+  currentZone = me.zone || 'dungeon';
+  const activeMap = currentZone === 'arena' ? ARENA_MAP : MAP;
+  const zoneLbl = document.getElementById('zoneLabel');
+  zoneLbl.textContent = currentZone === 'arena' ? '⚔️ PvP-Arena' : '🏰 Dungeon';
+  zoneLbl.className = currentZone;
+
   const camX = me.x - canvas.width / 2;
   const camY = me.y - canvas.height / 2;
 
   // Map
   const startCol = Math.max(0, Math.floor(camX / TILE));
-  const endCol = Math.min(MAP[0].length, Math.ceil((camX + canvas.width) / TILE));
+  const endCol = Math.min(activeMap[0].length, Math.ceil((camX + canvas.width) / TILE));
   const startRow = Math.max(0, Math.floor(camY / TILE));
-  const endRow = Math.min(MAP.length, Math.ceil((camY + canvas.height) / TILE));
+  const endRow = Math.min(activeMap.length, Math.ceil((camY + canvas.height) / TILE));
 
   for (let y = startRow; y < endRow; y++) {
     for (let x = startCol; x < endCol; x++) {
-      const wall = MAP[y][x] === '1';
+      const wall = activeMap[y][x] === '1';
       const sx = x * TILE - camX, sy = y * TILE - camY;
       if (wall) {
-        ctx.fillStyle = '#2b2f3a';
+        ctx.fillStyle = currentZone === 'arena' ? '#3a2b2b' : '#2b2f3a';
         ctx.fillRect(sx, sy, TILE, TILE);
-        ctx.fillStyle = '#1c1f27';
+        ctx.fillStyle = currentZone === 'arena' ? '#271c1c' : '#1c1f27';
         ctx.fillRect(sx, sy, TILE, 4);
       } else {
-        ctx.fillStyle = ((x + y) % 2 === 0) ? '#141821' : '#181c26';
+        ctx.fillStyle = ((x + y) % 2 === 0) ? (currentZone === 'arena' ? '#211616' : '#141821') : (currentZone === 'arena' ? '#251a1a' : '#181c26');
         ctx.fillRect(sx, sy, TILE, TILE);
       }
     }
   }
 
-  // Items
-  for (const it of world.items) {
-    const sx = it.x - camX, sy = it.y - camY;
-    ctx.beginPath();
-    ctx.arc(sx, sy, 7, 0, Math.PI * 2);
-    ctx.fillStyle = it.type === 'gold' ? '#f2c94c' : '#e05fd0';
-    ctx.fill();
-  }
+  if (currentZone === 'dungeon') {
+    // Items
+    for (const it of world.items) {
+      const sx = it.x - camX, sy = it.y - camY;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 7, 0, Math.PI * 2);
+      ctx.fillStyle = it.type === 'gold' ? '#f2c94c' : '#e05fd0';
+      ctx.fill();
+    }
 
-  // Monster
-  for (const m of world.monsters) {
-    const sx = m.x - camX, sy = m.y - camY;
-    ctx.beginPath();
-    ctx.arc(sx, sy, m.type === 'ork' ? 15 : 11, 0, Math.PI * 2);
-    ctx.fillStyle = m.type === 'ork' ? '#6b4a2f' : '#8f9c4a';
-    ctx.fill();
-    drawBar(sx - 16, sy - (m.type === 'ork' ? 26 : 20), 32, 4, m.hp / m.maxHp, '#e74c3c');
+    // Truhen
+    nearestChestId = null;
+    let nearestChestDist = Infinity;
+    for (const c of world.chests) {
+      const sx = c.x - camX, sy = c.y - camY;
+      ctx.font = '22px Verdana';
+      ctx.textAlign = 'center';
+      ctx.fillText(c.looted ? '📭' : '📦', sx, sy + 8);
+      if (!c.looted) {
+        const d = dist(me.x, me.y, c.x, c.y);
+        if (d < 44 && d < nearestChestDist) { nearestChestDist = d; nearestChestId = c.id; }
+      }
+    }
+    document.getElementById('interactBtn').style.display = nearestChestId ? 'block' : 'none';
+
+    // Monster
+    for (const m of world.monsters) {
+      const sx = m.x - camX, sy = m.y - camY;
+      ctx.beginPath();
+      ctx.arc(sx, sy, m.type === 'ork' ? 15 : 11, 0, Math.PI * 2);
+      ctx.fillStyle = m.type === 'ork' ? '#6b4a2f' : '#8f9c4a';
+      ctx.fill();
+      drawBar(sx - 16, sy - (m.type === 'ork' ? 26 : 20), 32, 4, m.hp / m.maxHp, '#e74c3c');
+    }
+  } else {
+    document.getElementById('interactBtn').style.display = 'none';
   }
 
   // Projektile
   for (const pr of world.projectiles) {
+    if ((pr.zone || 'dungeon') !== currentZone) continue;
     ctx.beginPath();
     ctx.arc(pr.x - camX, pr.y - camY, 4, 0, Math.PI * 2);
     ctx.fillStyle = '#6fd1ff';
     ctx.fill();
   }
 
-  // Spieler
+  // Spieler (nur gleiche Zone)
   for (const p of world.players) {
-    if (p.dead) continue;
+    if (p.dead || (p.zone || 'dungeon') !== currentZone) continue;
     const sx = p.x - camX, sy = p.y - camY;
     const color = (CLASSES[p.cls] && CLASSES[p.cls].color) || '#fff';
     ctx.beginPath();
@@ -341,6 +676,8 @@ function render() {
 
   updateHud(me);
 }
+
+function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
 
 function drawBar(x, y, w, h, pct, color) {
   pct = Math.max(0, Math.min(1, pct));
