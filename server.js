@@ -77,28 +77,38 @@ const TICK_RATE = 20; // Server-Ticks pro Sekunde
 const MAX_PLAYERS_PER_DUNGEON = 6;
 
 // Dungeon-Layout: 1 = Wand, 0 = Boden
-// 30 Spalten x 20 Zeilen
+// 46 Spalten x 30 Zeilen
 const MAP_ROWS = [
-  '111111111111111111111111111111',
-  '100000000000000000000000000001',
-  '100111110000111111110000000001',
-  '100100000000100000010000000001',
-  '100100111110100011010111111001',
-  '100000100000000010010000001001',
-  '111100100111111010011111101001',
-  '100000100100000010000000000001',
-  '100111100100111110111111110001',
-  '100000000100000000100000000001',
-  '100011111100111111100111110001',
-  '100010000000100000000100000001',
-  '100010111111100111111100011101',
-  '100000100000000100000000010001',
-  '111110100111110100111111010001',
-  '100000000100000000100000010001',
-  '100011111100011111100011110001',
-  '100000000000000000000000000001',
-  '100000000000000000000000000001',
-  '111111111111111111111111111111'
+  '1111111111111111111111111111111111111111111111',
+  '1111111111111111111111111111111111111111111111',
+  '1111111111111110000001111111000011111111111111',
+  '1111111000001110000001111111000011111111111111',
+  '1111111000000000000001111111000011111111111111',
+  '1111111000000000000000000000000011111111111111',
+  '1111111000001110110111111101000011111111111111',
+  '1111111000001110110111111101000011111111111111',
+  '1111111100111110110000111101110111110000001111',
+  '1111111100111110110000111101110111110000001111',
+  '1111111100000000000000111101110111110000001111',
+  '1111111100111110110000000000000000000000001111',
+  '1111111100111110110111100000000111110000001111',
+  '1111100000001110110111100000000111110000001111',
+  '1111100000001110110000000000000111111110111111',
+  '1111100000001110110000100000000111111110111111',
+  '1111100000000000000000000000000000000000111111',
+  '1111100000001110110000111111110101111100111111',
+  '1111100000001110110000111111110101111100111111',
+  '1111111110111110110000111111100000001100111111',
+  '1111111110111110111101111111100000001100111111',
+  '1111111110000000000000000000000000001100111111',
+  '1111111000001000010000011111100000001100111111',
+  '1111111000001000010000011111110101111100111111',
+  '1111111000000000000000000000000001100000001111',
+  '1111111000001000010000000000000000000000001111',
+  '1111111111111000010000011111111111100000001111',
+  '1111111111111111110000011111111111100000001111',
+  '1111111111111111111111111111111111111111111111',
+  '1111111111111111111111111111111111111111111111'
 ];
 const MAP_W = MAP_ROWS[0].length;
 const MAP_H = MAP_ROWS.length;
@@ -146,7 +156,8 @@ function randomFloorTile(zone) {
   const m = mapFor(zone);
   return m.floor[Math.floor(Math.random() * m.floor.length)];
 }
-const SPAWN_POINT = { x: 2 * TILE + TILE / 2, y: 1 * TILE + TILE / 2 };
+const SPAWN_TILE = DUNGEON.floor[0];
+const SPAWN_POINT = { x: SPAWN_TILE.x * TILE + TILE / 2, y: SPAWN_TILE.y * TILE + TILE / 2 };
 const ARENA_SPAWN_TILE = ARENA.floor[Math.floor(ARENA.floor.length / 2)];
 const ARENA_SPAWN = { x: ARENA_SPAWN_TILE.x * TILE + TILE / 2, y: ARENA_SPAWN_TILE.y * TILE + TILE / 2 };
 
@@ -199,7 +210,7 @@ const MONSTER_TYPES = {
   goblin: { hp: 40, dmg: 8, speed: 1.3, xp: 15, range: 30, cooldown: 900, color: '#8e7c4d', radius: 12 },
   ork:    { hp: 95, dmg: 16, speed: 0.9, xp: 40, range: 34, cooldown: 1200, color: '#5b4636', radius: 16 }
 };
-const MAX_MONSTERS = 14;
+const MAX_MONSTERS = 24;
 
 function spawnMonster() {
   if (Object.keys(monsters).length >= MAX_MONSTERS) return;
@@ -258,7 +269,7 @@ function tryMove(mapInfo, entity, dx, dy, radius) {
 }
 
 // ---------------- Truhen ----------------
-const CHEST_COUNT = 5;
+const CHEST_COUNT = 9;
 const CHEST_RESPAWN_MS = 90000;
 const chests = {};
 (function initChests() {
@@ -306,6 +317,11 @@ function grantXp(p, amount) {
   p.xp += amount;
   while (p.xp >= p.xpNext) levelUp(p);
 }
+
+// ---------------- Admin ----------------
+const ADMIN_USERNAMES = new Set(
+  (process.env.ADMIN_USERNAMES || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+);
 
 // ---------------- Socket-Handling ----------------
 io.on('connection', (socket) => {
@@ -360,6 +376,7 @@ io.on('connection', (socket) => {
         upgDmg: account.upgDmg || 0,
         upgHp: account.upgHp || 0,
         upgSpeed: account.upgSpeed || 0,
+        isAdmin: ADMIN_USERNAMES.has(username),
         lastAttack: 0,
         dead: false,
         input: { up: false, down: false, left: false, right: false, aimX: 0, aimY: 0 }
@@ -372,7 +389,8 @@ io.on('connection', (socket) => {
         map: MAP_ROWS,
         arenaMap: ARENA_ROWS,
         tile: TILE,
-        classes: CLASSES
+        classes: CLASSES,
+        isAdmin: players[socket.id].isAdmin
       });
     } catch (err) {
       console.error('Auth-Fehler:', err.message);
@@ -530,6 +548,65 @@ io.on('connection', (socket) => {
     if (!p || !msg) return;
     const text = String(msg).slice(0, 80);
     io.emit('chat', { name: p.name, text });
+  });
+
+  // ---- Admin-Aktionen: serverseitig IMMER erneut gegen isAdmin geprueft ----
+  socket.on('adminGiveGold', (data) => {
+    const p = players[socket.id];
+    if (!p || !p.isAdmin) return;
+    const amount = Math.max(1, Math.min(9999, parseInt(data && data.amount, 10) || 50));
+    if (data && data.target === 'self') {
+      p.gold += amount;
+      saveAccountProgress(p);
+    } else {
+      for (const id in players) {
+        players[id].gold += amount;
+        saveAccountProgress(players[id]);
+      }
+      io.emit('announcement', `🎉 ${p.name} lässt Gold regnen: +${amount} Gold für alle!`);
+    }
+  });
+
+  socket.on('adminGivePotions', (data) => {
+    const p = players[socket.id];
+    if (!p || !p.isAdmin) return;
+    const amount = Math.max(1, Math.min(20, parseInt(data && data.amount, 10) || 3));
+    if (data && data.target === 'self') {
+      p.potions += amount;
+      saveAccountProgress(p);
+    } else {
+      for (const id in players) {
+        players[id].potions += amount;
+        saveAccountProgress(players[id]);
+      }
+      io.emit('announcement', `🧪 ${p.name} verteilt ${amount} Heiltränke an alle!`);
+    }
+  });
+
+  socket.on('adminAnnounce', (data) => {
+    const p = players[socket.id];
+    if (!p || !p.isAdmin) return;
+    const text = String((data && data.text) || '').slice(0, 140).trim();
+    if (!text) return;
+    io.emit('announcement', `📢 ${text}`);
+  });
+
+  socket.on('adminSpawnWave', () => {
+    const p = players[socket.id];
+    if (!p || !p.isAdmin) return;
+    for (let i = 0; i < 10; i++) spawnMonster();
+    io.emit('announcement', `👹 ${p.name} hat eine Monsterwelle beschworen!`);
+  });
+
+  socket.on('adminHealAll', () => {
+    const p = players[socket.id];
+    if (!p || !p.isAdmin) return;
+    for (const id in players) {
+      const pl = players[id];
+      pl.hp = pl.maxHp;
+      pl.dead = false;
+    }
+    io.emit('announcement', `💚 ${p.name} hat alle vollständig geheilt!`);
   });
 
   socket.on('disconnect', () => {
