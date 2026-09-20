@@ -150,6 +150,38 @@
   #zoneLabel.arena { color:#ff8a8a; border:1px solid #ff8a8a55; }
   #zoneLabel.dungeon { color:#9ad1ff; border:1px solid #9ad1ff55; }
 
+  #adminPanel {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    background: var(--panel); border:2px solid #c99a3a; border-radius:14px;
+    padding:22px 24px; width:340px; max-width:90vw; z-index:27; display:none;
+    box-shadow: 0 10px 40px rgba(0,0,0,.6); max-height:85vh; overflow-y:auto;
+  }
+  #adminPanel h2 { margin:0 0 4px; color:var(--accent); font-size:18px; text-align:center; }
+  #adminPanel p.sub { margin:0 0 14px; text-align:center; color:#9aa2b1; font-size:11px; }
+  .adminRow { margin-bottom:12px; }
+  .adminRow label { display:block; font-size:11px; color:#9aa2b1; margin-bottom:4px; }
+  .adminRow input[type=text], .adminRow input[type=number] {
+    width:100%; padding:8px 10px; border-radius:6px; border:1px solid #333a47;
+    background:#0d1117; color:#fff; font-size:13px; margin-bottom:6px;
+  }
+  .adminBtnRow { display:flex; gap:6px; }
+  .adminBtnRow button, .adminSingleBtn {
+    flex:1; padding:8px 6px; border:none; border-radius:6px; font-size:12px; cursor:pointer;
+    background: linear-gradient(180deg,#f0d27a,#c99a3a); color:#241a05; font-weight:bold;
+  }
+  .adminSingleBtn { width:100%; margin-bottom:12px; }
+  #adminClose {
+    width:100%; margin-top:4px; padding:8px; border:none; border-radius:8px;
+    background:#2a2f3a; color:#ddd; cursor:pointer; font-size:12px;
+  }
+
+  #announceToast {
+    position:absolute; top:16%; left:50%; transform:translateX(-50%);
+    z-index:30; background:#1a1408ee; border:2px solid var(--accent); color:#ffe9a8;
+    padding:12px 22px; border-radius:10px; font-size:15px; font-weight:bold; display:none;
+    text-align:center; max-width:80vw; box-shadow:0 6px 24px rgba(0,0,0,.5);
+  }
+
   /* ---- Mobile Steuerung ---- */
   #mobileControls { display:none; }
   .touch-active #mobileControls { display:block; }
@@ -206,9 +238,46 @@
     <h2>Menü</h2>
     <button class="menuOption" id="menuOptionShop">🏪 Shop</button>
     <button class="menuOption" id="menuOptionPvp">⚔️ PvP-Lobby</button>
+    <button class="menuOption" id="menuOptionAdmin" style="display:none;">👑 Admin-Panel</button>
     <button class="menuOption" id="menuOptionClose">▶️ Weiterspielen</button>
     <button class="menuOption" id="menuOptionLeave">🚪 Spiel verlassen</button>
   </div>
+
+  <div id="adminPanel">
+    <h2>👑 Admin-Panel</h2>
+    <p class="sub">Aktionen wirken auf alle aktuell verbundenen Spieler.</p>
+
+    <div class="adminRow">
+      <label>Gold verschenken</label>
+      <input type="number" id="adminGoldAmount" value="50" min="1" max="9999">
+      <div class="adminBtnRow">
+        <button id="adminGoldAll">An alle</button>
+        <button id="adminGoldSelf">Nur mir</button>
+      </div>
+    </div>
+
+    <div class="adminRow">
+      <label>Heiltränke verschenken</label>
+      <input type="number" id="adminPotionAmount" value="3" min="1" max="20">
+      <div class="adminBtnRow">
+        <button id="adminPotionAll">An alle</button>
+        <button id="adminPotionSelf">Nur mir</button>
+      </div>
+    </div>
+
+    <div class="adminRow">
+      <label>Server-Ansage</label>
+      <input type="text" id="adminAnnounceText" maxlength="140" placeholder="z.B. Event startet in 5 Minuten!">
+      <button class="adminSingleBtn" id="adminAnnounceBtn" style="margin-bottom:0;">Ansage senden</button>
+    </div>
+
+    <button class="adminSingleBtn" id="adminWaveBtn">👹 Monsterwelle auslösen</button>
+    <button class="adminSingleBtn" id="adminHealBtn">💚 Alle vollständig heilen</button>
+
+    <button id="adminClose">Schliessen</button>
+  </div>
+
+  <div id="announceToast"></div>
 
   <div id="pvpPanel">
     <h2>⚔️ PvP-Lobby</h2>
@@ -282,6 +351,7 @@ let selectedClass = 'krieger';
 let hitFx = [];
 let currentZone = 'dungeon';
 let nearestChestId = null;
+let isAdmin = false;
 
 const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 if (isTouchDevice) document.body.classList.add('touch-active');
@@ -336,6 +406,7 @@ document.getElementById('menuBtn').addEventListener('click', () => toggleMenu())
 document.getElementById('menuOptionClose').addEventListener('click', () => toggleMenu(false));
 document.getElementById('menuOptionShop').addEventListener('click', () => { toggleMenu(false); toggleShop(true); });
 document.getElementById('menuOptionPvp').addEventListener('click', () => { toggleMenu(false); togglePvpPanel(true); });
+document.getElementById('menuOptionAdmin').addEventListener('click', () => { toggleMenu(false); toggleAdminPanel(true); });
 document.getElementById('menuOptionLeave').addEventListener('click', () => {
   if (confirm('Spiel wirklich verlassen?')) {
     if (socket) socket.disconnect();
@@ -368,6 +439,38 @@ document.getElementById('pvpToggleBtn').addEventListener('click', () => {
   setTimeout(renderPvpPanel, 150);
 });
 document.getElementById('pvpClose').addEventListener('click', () => togglePvpPanel(false));
+
+// ---------------- Admin-Panel ----------------
+let adminOpen = false;
+function toggleAdminPanel(force) {
+  adminOpen = (typeof force === 'boolean') ? force : !adminOpen;
+  document.getElementById('adminPanel').style.display = adminOpen ? 'block' : 'none';
+}
+document.getElementById('adminClose').addEventListener('click', () => toggleAdminPanel(false));
+document.getElementById('adminGoldAll').addEventListener('click', () => {
+  const amount = parseInt(document.getElementById('adminGoldAmount').value, 10) || 50;
+  socket.emit('adminGiveGold', { amount, target: 'all' });
+});
+document.getElementById('adminGoldSelf').addEventListener('click', () => {
+  const amount = parseInt(document.getElementById('adminGoldAmount').value, 10) || 50;
+  socket.emit('adminGiveGold', { amount, target: 'self' });
+});
+document.getElementById('adminPotionAll').addEventListener('click', () => {
+  const amount = parseInt(document.getElementById('adminPotionAmount').value, 10) || 3;
+  socket.emit('adminGivePotions', { amount, target: 'all' });
+});
+document.getElementById('adminPotionSelf').addEventListener('click', () => {
+  const amount = parseInt(document.getElementById('adminPotionAmount').value, 10) || 3;
+  socket.emit('adminGivePotions', { amount, target: 'self' });
+});
+document.getElementById('adminAnnounceBtn').addEventListener('click', () => {
+  const text = document.getElementById('adminAnnounceText').value.trim();
+  if (!text) return;
+  socket.emit('adminAnnounce', { text });
+  document.getElementById('adminAnnounceText').value = '';
+});
+document.getElementById('adminWaveBtn').addEventListener('click', () => socket.emit('adminSpawnWave'));
+document.getElementById('adminHealBtn').addEventListener('click', () => socket.emit('adminHealAll'));
 
 // ---------------- Startscreen ----------------
 let authMode = 'login';
@@ -415,12 +518,14 @@ function startGame() {
   });
   socket.on('init', (data) => {
     myId = data.you; MAP = data.map; ARENA_MAP = data.arenaMap; TILE = data.tile; CLASSES = data.classes;
+    isAdmin = !!data.isAdmin;
     document.getElementById('startScreen').style.display = 'none';
     document.getElementById('hud').style.display = 'flex';
     document.getElementById('hint').style.display = 'block';
     document.getElementById('chatInput').style.display = 'block';
     document.getElementById('menuBtn').style.display = 'flex';
     document.getElementById('zoneLabel').style.display = 'block';
+    if (isAdmin) document.getElementById('menuOptionAdmin').style.display = 'block';
     bindInput();
     requestAnimationFrame(loop);
   });
@@ -443,6 +548,14 @@ function startGame() {
     toast.style.display = 'block';
     clearTimeout(toast._t);
     toast._t = setTimeout(() => { toast.style.display = 'none'; }, 2200);
+  });
+  socket.on('announcement', (text) => {
+    const toast = document.getElementById('announceToast');
+    toast.textContent = text;
+    toast.style.display = 'block';
+    addChat(text);
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { toast.style.display = 'none'; }, 4500);
   });
 
   socket.emit('auth', { mode: authMode, username, password, name, cls: selectedClass });
