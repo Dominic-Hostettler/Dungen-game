@@ -223,6 +223,7 @@
       <span>🪙 <span id="goldTxt">0</span></span>
       <span>🧪 <span id="potionTxt">0</span> (E)</span>
     </div>
+    <div id="eventBadges" style="display:flex; gap:6px; margin-top:2px;"></div>
   </div>
 
   <div id="chatBox"></div>
@@ -273,6 +274,9 @@
 
     <button class="adminSingleBtn" id="adminWaveBtn">👹 Monsterwelle auslösen</button>
     <button class="adminSingleBtn" id="adminHealBtn">💚 Alle vollständig heilen</button>
+    <button class="adminSingleBtn" id="adminGoldEventBtn">💰 Doppel-Gold-Event (5 Min)</button>
+    <button class="adminSingleBtn" id="adminXpEventBtn">✨ Doppel-XP-Event (5 Min)</button>
+    <button class="adminSingleBtn" id="adminBossBtn">👑 Boss jetzt herbeirufen</button>
 
     <button id="adminClose">Schliessen</button>
   </div>
@@ -346,7 +350,7 @@ window.addEventListener('resize', resize); resize();
 
 let socket = null;
 let TILE = 32, MAP = [], ARENA_MAP = [], myId = null, CLASSES = {};
-let world = { players: [], monsters: [], items: [], chests: [], projectiles: [] };
+let world = { players: [], monsters: [], items: [], chests: [], projectiles: [], events: {} };
 let selectedClass = 'krieger';
 let hitFx = [];
 let currentZone = 'dungeon';
@@ -471,6 +475,9 @@ document.getElementById('adminAnnounceBtn').addEventListener('click', () => {
 });
 document.getElementById('adminWaveBtn').addEventListener('click', () => socket.emit('adminSpawnWave'));
 document.getElementById('adminHealBtn').addEventListener('click', () => socket.emit('adminHealAll'));
+document.getElementById('adminGoldEventBtn').addEventListener('click', () => socket.emit('adminEventGold'));
+document.getElementById('adminXpEventBtn').addEventListener('click', () => socket.emit('adminEventXp'));
+document.getElementById('adminBossBtn').addEventListener('click', () => socket.emit('adminSpawnBoss'));
 
 // ---------------- Startscreen ----------------
 let authMode = 'login';
@@ -740,11 +747,22 @@ function render() {
     // Monster
     for (const m of world.monsters) {
       const sx = m.x - camX, sy = m.y - camY;
+      const isBoss = m.type === 'boss';
+      const radius = isBoss ? 30 : (m.type === 'ork' ? 15 : 11);
       ctx.beginPath();
-      ctx.arc(sx, sy, m.type === 'ork' ? 15 : 11, 0, Math.PI * 2);
-      ctx.fillStyle = m.type === 'ork' ? '#6b4a2f' : '#8f9c4a';
+      ctx.arc(sx, sy, radius, 0, Math.PI * 2);
+      ctx.fillStyle = isBoss ? '#c0392b' : (m.type === 'ork' ? '#6b4a2f' : '#8f9c4a');
       ctx.fill();
-      drawBar(sx - 16, sy - (m.type === 'ork' ? 26 : 20), 32, 4, m.hp / m.maxHp, '#e74c3c');
+      if (isBoss) {
+        ctx.lineWidth = 3; ctx.strokeStyle = '#ffd76688'; ctx.stroke();
+        ctx.font = 'bold 13px Verdana';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffd766';
+        ctx.fillText('👑 Boss', sx, sy - radius - 10);
+        drawBar(sx - 40, sy - radius - 6, 80, 6, m.hp / m.maxHp, '#e74c3c');
+      } else {
+        drawBar(sx - 16, sy - (m.type === 'ork' ? 26 : 20), 32, 4, m.hp / m.maxHp, '#e74c3c');
+      }
     }
   } else {
     document.getElementById('interactBtn').style.display = 'none';
@@ -810,6 +828,14 @@ function updateHud(me) {
   document.getElementById('goldTxt').textContent = me.gold;
   document.getElementById('potionTxt').textContent = me.potions;
   document.getElementById('deathOverlay').style.display = me.dead ? 'flex' : 'none';
+
+  const badgeBox = document.getElementById('eventBadges');
+  const ev = world.events || {};
+  const badges = [];
+  if (ev.goldRemaining > 0) badges.push(`<span style="background:#3a2f0f; color:#f2c94c; padding:2px 8px; border-radius:10px; font-size:10px;">💰 x2 Gold ${Math.ceil(ev.goldRemaining / 1000)}s</span>`);
+  if (ev.xpRemaining > 0) badges.push(`<span style="background:#0f2c3a; color:#6fd1ff; padding:2px 8px; border-radius:10px; font-size:10px;">✨ x2 XP ${Math.ceil(ev.xpRemaining / 1000)}s</span>`);
+  if (ev.bossAlive) badges.push(`<span style="background:#3a0f0f; color:#ff8a8a; padding:2px 8px; border-radius:10px; font-size:10px;">👑 Boss aktiv</span>`);
+  badgeBox.innerHTML = badges.join('');
 }
 </script>
 </body>
