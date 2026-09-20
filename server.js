@@ -13,7 +13,8 @@ const bcrypt = require('bcryptjs');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: '*' }
+  cors: { origin: '*' },
+  perMessageDeflate: true
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -77,39 +78,70 @@ const TICK_RATE = 20; // Server-Ticks pro Sekunde
 const MAX_PLAYERS_PER_DUNGEON = 6;
 
 // Dungeon-Layout: 1 = Wand, 0 = Boden
-// 46 Spalten x 30 Zeilen
-const MAP_ROWS = [
-  '1111111111111111111111111111111111111111111111',
-  '1111111111111111111111111111111111111111111111',
-  '1111111111111110000001111111000011111111111111',
-  '1111111000001110000001111111000011111111111111',
-  '1111111000000000000001111111000011111111111111',
-  '1111111000000000000000000000000011111111111111',
-  '1111111000001110110111111101000011111111111111',
-  '1111111000001110110111111101000011111111111111',
-  '1111111100111110110000111101110111110000001111',
-  '1111111100111110110000111101110111110000001111',
-  '1111111100000000000000111101110111110000001111',
-  '1111111100111110110000000000000000000000001111',
-  '1111111100111110110111100000000111110000001111',
-  '1111100000001110110111100000000111110000001111',
-  '1111100000001110110000000000000111111110111111',
-  '1111100000001110110000100000000111111110111111',
-  '1111100000000000000000000000000000000000111111',
-  '1111100000001110110000111111110101111100111111',
-  '1111100000001110110000111111110101111100111111',
-  '1111111110111110110000111111100000001100111111',
-  '1111111110111110111101111111100000001100111111',
-  '1111111110000000000000000000000000001100111111',
-  '1111111000001000010000011111100000001100111111',
-  '1111111000001000010000011111110101111100111111',
-  '1111111000000000000000000000000001100000001111',
-  '1111111000001000010000000000000000000000001111',
-  '1111111111111000010000011111111111100000001111',
-  '1111111111111111110000011111111111100000001111',
-  '1111111111111111111111111111111111111111111111',
-  '1111111111111111111111111111111111111111111111'
-];
+// Prozedural generiert (Randomized-DFS-Raumgraph), garantiert zusammenhaengend.
+function generateDungeon(gridW, gridH, cellSize) {
+  const W = gridW * cellSize + 1;
+  const H = gridH * cellSize + 1;
+  const grid = [];
+  for (let y = 0; y < H; y++) grid.push(new Array(W).fill('1'));
+
+  const idx = (gx, gy) => gy * gridW + gx;
+  const visited = new Uint8Array(gridW * gridH);
+  const stack = [[0, 0]];
+  visited[idx(0, 0)] = 1;
+  const edges = [];
+
+  while (stack.length) {
+    const [cx, cy] = stack[stack.length - 1];
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const options = [];
+    for (const [dx, dy] of dirs) {
+      const nx = cx + dx, ny = cy + dy;
+      if (nx >= 0 && ny >= 0 && nx < gridW && ny < gridH && !visited[idx(nx, ny)]) options.push([nx, ny]);
+    }
+    if (options.length) {
+      const [nx, ny] = options[Math.floor(Math.random() * options.length)];
+      visited[idx(nx, ny)] = 1;
+      edges.push([[cx, cy], [nx, ny]]);
+      stack.push([nx, ny]);
+    } else {
+      stack.pop();
+    }
+  }
+
+  const margin = 1;
+  function carveRoom(gx, gy) {
+    const size = cellSize - 2 * margin;
+    const sx = gx * cellSize + margin, sy = gy * cellSize + margin;
+    for (let y = 0; y < size; y++) {
+      const row = grid[sy + y];
+      for (let x = 0; x < size; x++) row[sx + x] = '0';
+    }
+  }
+  function roomCenter(gx, gy) {
+    return { x: gx * cellSize + Math.floor(cellSize / 2), y: gy * cellSize + Math.floor(cellSize / 2) };
+  }
+  function carveCorridor(a, b) {
+    let x = a.x, y = a.y;
+    const horizFirst = Math.random() < 0.5;
+    if (horizFirst) {
+      while (x !== b.x) { grid[y][x] = '0'; x += x < b.x ? 1 : -1; }
+      while (y !== b.y) { grid[y][x] = '0'; y += y < b.y ? 1 : -1; }
+    } else {
+      while (y !== b.y) { grid[y][x] = '0'; y += y < b.y ? 1 : -1; }
+      while (x !== b.x) { grid[y][x] = '0'; x += x < b.x ? 1 : -1; }
+    }
+    grid[b.y][b.x] = '0';
+  }
+
+  for (let gy = 0; gy < gridH; gy++) for (let gx = 0; gx < gridW; gx++) carveRoom(gx, gy);
+  for (const [a, b] of edges) carveCorridor(roomCenter(a[0], a[1]), roomCenter(b[0], b[1]));
+
+  return grid.map(r => r.join(''));
+}
+
+// 100 x 50 Raster à 10 Felder -> ca. 1001 x 501 Felder Gesamtkarte
+const MAP_ROWS = generateDungeon(100, 50, 10);
 const MAP_W = MAP_ROWS[0].length;
 const MAP_H = MAP_ROWS.length;
 
@@ -163,9 +195,9 @@ const ARENA_SPAWN = { x: ARENA_SPAWN_TILE.x * TILE + TILE / 2, y: ARENA_SPAWN_TI
 
 // ---------------- Klassen-Definitionen ----------------
 const CLASSES = {
-  krieger: { name: 'Krieger', maxHp: 150, speed: 4.4, dmg: 18, range: 42, cooldown: 500, kind: 'melee', color: '#e74c3c' },
-  magier:  { name: 'Magier',  maxHp: 80,  speed: 4.1, dmg: 24, range: 240, cooldown: 750, kind: 'ranged', color: '#3498db' },
-  schurke: { name: 'Schurke', maxHp: 100, speed: 6.0, dmg: 13, range: 36, cooldown: 320, kind: 'melee', color: '#2ecc71', crit: 0.25 }
+  krieger: { name: 'Krieger', maxHp: 150, speed: 2.4, dmg: 18, range: 42, cooldown: 500, kind: 'melee', color: '#e74c3c' },
+  magier:  { name: 'Magier',  maxHp: 80,  speed: 2.1, dmg: 24, range: 240, cooldown: 750, kind: 'ranged', color: '#3498db' },
+  schurke: { name: 'Schurke', maxHp: 100, speed: 3.0, dmg: 13, range: 36, cooldown: 320, kind: 'melee', color: '#2ecc71', crit: 0.25 }
 };
 
 function statsForLevel(clsKey, level) {
@@ -208,9 +240,10 @@ let projectileIdCounter = 0;
 
 const MONSTER_TYPES = {
   goblin: { hp: 40, dmg: 8, speed: 1.3, xp: 15, range: 30, cooldown: 900, color: '#8e7c4d', radius: 12 },
-  ork:    { hp: 95, dmg: 16, speed: 0.9, xp: 40, range: 34, cooldown: 1200, color: '#5b4636', radius: 16 }
+  ork:    { hp: 95, dmg: 16, speed: 0.9, xp: 40, range: 34, cooldown: 1200, color: '#5b4636', radius: 16 },
+  boss:   { hp: 900, dmg: 32, speed: 1.0, xp: 400, range: 48, cooldown: 900, color: '#c0392b', radius: 26, name: 'Dungeon-Wächter' }
 };
-const MAX_MONSTERS = 24;
+const MAX_MONSTERS = 300;
 
 function spawnMonster() {
   if (Object.keys(monsters).length >= MAX_MONSTERS) return;
@@ -234,12 +267,13 @@ function spawnItem(x, y) {
   const roll = Math.random();
   const type = roll < 0.6 ? 'gold' : 'potion';
   const id = 'i' + (itemIdCounter++);
-  items[id] = { id, type, x, y, amount: type === 'gold' ? (5 + Math.floor(Math.random() * 15)) : 1 };
+  const amount = type === 'gold' ? Math.round((5 + Math.floor(Math.random() * 15)) * goldMult()) : 1;
+  items[id] = { id, type, x, y, amount };
 }
 
 // Initiale Monster
-for (let i = 0; i < 8; i++) spawnMonster();
-setInterval(() => { if (Math.random() < 0.5) spawnMonster(); }, 4000);
+for (let i = 0; i < 100; i++) spawnMonster();
+setInterval(() => { for (let i = 0; i < 3; i++) { if (Math.random() < 0.7) spawnMonster(); } }, 3000);
 
 // ---------------- Hilfsfunktionen ----------------
 function dist(ax, ay, bx, by) {
@@ -249,6 +283,12 @@ function dist(ax, ay, bx, by) {
 function xpToNextLevel(level) {
   return 80 + level * 60;
 }
+
+// ---------------- Events (Doppel-Gold / Doppel-XP) ----------------
+let goldEventUntil = 0;
+let xpEventUntil = 0;
+function goldMult() { return Date.now() < goldEventUntil ? 2 : 1; }
+function xpMult() { return Date.now() < xpEventUntil ? 2 : 1; }
 
 function circleHitsWall(mapInfo, x, y, radius) {
   const pts = [
@@ -269,7 +309,7 @@ function tryMove(mapInfo, entity, dx, dy, radius) {
 }
 
 // ---------------- Truhen ----------------
-const CHEST_COUNT = 9;
+const CHEST_COUNT = 40;
 const CHEST_RESPAWN_MS = 90000;
 const chests = {};
 (function initChests() {
@@ -314,8 +354,46 @@ function levelUp(p) {
 }
 
 function grantXp(p, amount) {
-  p.xp += amount;
+  p.xp += Math.round(amount * xpMult());
   while (p.xp >= p.xpNext) levelUp(p);
+}
+
+// ---------------- Boss-Zyklus (alle 10 Minuten) ----------------
+const BOSS_INTERVAL_MS = 10 * 60 * 1000;
+let bossId = null;
+function spawnBoss() {
+  const tile = randomFloorTile('dungeon');
+  const id = 'boss' + Date.now();
+  monsters[id] = {
+    id, type: 'boss',
+    x: tile.x * TILE + TILE / 2,
+    y: tile.y * TILE + TILE / 2,
+    hp: MONSTER_TYPES.boss.hp, maxHp: MONSTER_TYPES.boss.hp,
+    lastAttack: 0, targetId: null,
+    homeX: tile.x * TILE + TILE / 2, homeY: tile.y * TILE + TILE / 2
+  };
+  bossId = id;
+  io.emit('announcement', `👑 Der ${MONSTER_TYPES.boss.name} ist erschienen! Findet ihn im Dungeon!`);
+}
+function bossCycle() {
+  if (bossId && monsters[bossId]) delete monsters[bossId];
+  spawnBoss();
+}
+setTimeout(() => {
+  bossCycle();
+  setInterval(bossCycle, BOSS_INTERVAL_MS);
+}, 45000); // erster Boss 45s nach Serverstart, danach alle 10 Minuten
+
+function onMonsterKilled(m, killer) {
+  if (m.type === 'boss') {
+    bossId = null;
+    for (let i = 0; i < 4; i++) spawnItem(m.x + (Math.random() * 40 - 20), m.y + (Math.random() * 40 - 20));
+    if (killer) killer.potions += 2;
+    io.emit('announcement', `🏆 ${killer ? killer.name : 'Jemand'} hat den Boss besiegt! Riesiger Loot-Regen!`);
+  } else {
+    spawnItem(m.x, m.y);
+  }
+  if (killer) grantXp(killer, MONSTER_TYPES[m.type].xp);
 }
 
 // ---------------- Admin ----------------
@@ -456,8 +534,7 @@ io.on('connection', (socket) => {
         closest.hp -= dmg;
         io.emit('hit', { x: closest.x, y: closest.y, dmg });
         if (closest.hp <= 0) {
-          spawnItem(closest.x, closest.y);
-          grantXp(p, MONSTER_TYPES[closest.type].xp);
+          onMonsterKilled(closest, p);
           delete monsters[closest.id];
         }
       }
@@ -499,7 +576,7 @@ io.on('connection', (socket) => {
 
     chest.looted = true;
     chest.respawnAt = Date.now() + CHEST_RESPAWN_MS;
-    const gold = 20 + Math.floor(Math.random() * 40);
+    const gold = Math.round((20 + Math.floor(Math.random() * 40)) * goldMult());
     const gotPotion = Math.random() < 0.35;
     p.gold += gold;
     if (gotPotion) p.potions += 1;
@@ -607,6 +684,27 @@ io.on('connection', (socket) => {
       pl.dead = false;
     }
     io.emit('announcement', `💚 ${p.name} hat alle vollständig geheilt!`);
+  });
+
+  socket.on('adminEventGold', () => {
+    const p = players[socket.id];
+    if (!p || !p.isAdmin) return;
+    goldEventUntil = Date.now() + 5 * 60000;
+    io.emit('announcement', `💰 ${p.name} startet ein Doppel-Gold-Event! (5 Minuten)`);
+  });
+
+  socket.on('adminEventXp', () => {
+    const p = players[socket.id];
+    if (!p || !p.isAdmin) return;
+    xpEventUntil = Date.now() + 5 * 60000;
+    io.emit('announcement', `✨ ${p.name} startet ein Doppel-XP-Event! (5 Minuten)`);
+  });
+
+  socket.on('adminSpawnBoss', () => {
+    const p = players[socket.id];
+    if (!p || !p.isAdmin) return;
+    bossCycle();
+    io.emit('announcement', `👑 ${p.name} hat den Boss sofort herbeigerufen!`);
   });
 
   socket.on('disconnect', () => {
@@ -723,9 +821,7 @@ function tick() {
           m.hp -= pr.dmg;
           io.emit('hit', { x: m.x, y: m.y, dmg: pr.dmg });
           if (m.hp <= 0) {
-            spawnItem(m.x, m.y);
-            const owner = players[pr.ownerId];
-            if (owner) grantXp(owner, MONSTER_TYPES[m.type].xp);
+            onMonsterKilled(m, players[pr.ownerId]);
             delete monsters[mid];
           }
           hitSomething = true;
@@ -752,7 +848,12 @@ function broadcastState() {
     })),
     items: Object.values(items),
     chests: Object.values(chests).map(c => ({ id: c.id, x: c.x, y: c.y, looted: c.looted })),
-    projectiles: Object.values(projectiles).map(pr => ({ id: pr.id, x: pr.x, y: pr.y, zone: pr.zone }))
+    projectiles: Object.values(projectiles).map(pr => ({ id: pr.id, x: pr.x, y: pr.y, zone: pr.zone })),
+    events: {
+      goldRemaining: Math.max(0, goldEventUntil - Date.now()),
+      xpRemaining: Math.max(0, xpEventUntil - Date.now()),
+      bossAlive: !!(bossId && monsters[bossId])
+    }
   };
   io.emit('state', state);
 }
