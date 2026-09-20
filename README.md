@@ -1,4 +1,4 @@
-[README.md](https://github.com/user-attachments/files/32335707/README.md)
+[README.md](https://github.com/user-attachments/files/32434992/README.md)
 # Leo's Dungeon RPG – Setup & Deployment
 
 Echtzeit-Multiplayer-Dungeon-RPG (Node.js + Socket.io Server, Canvas-Client).
@@ -50,6 +50,7 @@ dann NICHT gespeichert.
 5. Unter **"Environment"** → **"Add Environment Variable"**:
    - Key: `MONGO_URI`
    - Value: der Connection-String aus Schritt 2 (MongoDB Atlas)
+   - Optional, für Admin-Rechte: Key `ADMIN_USERNAMES`, Value z.B. `dein_benutzername` (mehrere Namen mit Komma trennen, z.B. `leo,max`). Wer sich mit einem dieser Benutzernamen einloggt, sieht im Spielmenü das 👑 Admin-Panel (Gold/Tränke verschenken, Server-Ansagen, Monsterwelle auslösen, alle heilen).
 6. Deploy klicken. Nach ein paar Minuten bekommst du eine URL wie
    `https://leo-dungeon-rpg.onrender.com`
 
