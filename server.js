@@ -49,7 +49,7 @@ async function loadAccount(username) {
 async function createAccount(username, passwordHash, cls) {
   const doc = {
     username, passwordHash, cls,
-    level: 1, xp: 0, gold: 0, potions: 1,
+    level: 1, xp: 0, gold: 0, potions: 1, speedPotions: 0,
     upgDmg: 0, upgHp: 0, upgSpeed: 0,
     createdAt: new Date()
   };
@@ -63,7 +63,7 @@ async function saveAccountProgress(p) {
     await accountsCol.updateOne(
       { username: p.username },
       { $set: {
-        level: p.level, xp: p.xp, gold: p.gold, potions: p.potions, cls: p.cls,
+        level: p.level, xp: p.xp, gold: p.gold, potions: p.potions, speedPotions: p.speedPotions, cls: p.cls,
         upgDmg: p.upgDmg, upgHp: p.upgHp, upgSpeed: p.upgSpeed
       } }
     );
@@ -111,8 +111,11 @@ function generateDungeon(gridW, gridH, cellSize) {
 
   const margin = 1;
   function carveRoom(gx, gy) {
-    const size = cellSize - 2 * margin;
-    const sx = gx * cellSize + margin, sy = gy * cellSize + margin;
+    // Zufaellige Raumgroesse pro Zelle (zentriert), mehr Abwechslung statt immer gleicher Quadrate
+    const maxSize = cellSize - 2 * margin;
+    const size = Math.max(4, maxSize - Math.floor(Math.random() * 3));
+    const off = Math.floor((maxSize - size) / 2);
+    const sx = gx * cellSize + margin + off, sy = gy * cellSize + margin + off;
     for (let y = 0; y < size; y++) {
       const row = grid[sy + y];
       for (let x = 0; x < size; x++) row[sx + x] = '0';
@@ -137,11 +140,20 @@ function generateDungeon(gridW, gridH, cellSize) {
   for (let gy = 0; gy < gridH; gy++) for (let gx = 0; gx < gridW; gx++) carveRoom(gx, gy);
   for (const [a, b] of edges) carveCorridor(roomCenter(a[0], a[1]), roomCenter(b[0], b[1]));
 
+  // Zusaetzliche zufaellige Verbindungen zwischen Nachbarzellen -> Schleifen statt reinem Baum,
+  // das macht das Layout weniger vorhersehbar / abwechslungsreicher
+  for (let gy = 0; gy < gridH; gy++) {
+    for (let gx = 0; gx < gridW; gx++) {
+      if (gx + 1 < gridW && Math.random() < 0.12) carveCorridor(roomCenter(gx, gy), roomCenter(gx + 1, gy));
+      if (gy + 1 < gridH && Math.random() < 0.12) carveCorridor(roomCenter(gx, gy), roomCenter(gx, gy + 1));
+    }
+  }
+
   return grid.map(r => r.join(''));
 }
 
-// 100 x 50 Raster à 10 Felder -> ca. 1001 x 501 Felder Gesamtkarte
-const MAP_ROWS = generateDungeon(10, 50, 10);
+// 25 x 5 Raster à 10 Felder -> ca. 251 x 51 Felder Gesamtkarte (bei jedem Serverstart neu generiert)
+const MAP_ROWS = generateDungeon(25, 5, 10);
 const MAP_W = MAP_ROWS[0].length;
 const MAP_H = MAP_ROWS.length;
 
@@ -188,8 +200,11 @@ function randomFloorTile(zone) {
   const m = mapFor(zone);
   return m.floor[Math.floor(Math.random() * m.floor.length)];
 }
-const SPAWN_TILE = DUNGEON.floor[0];
-const SPAWN_POINT = { x: SPAWN_TILE.x * TILE + TILE / 2, y: SPAWN_TILE.y * TILE + TILE / 2 };
+const SPAWN_TILE = DUNGEON.floor[0]; // Fallback, falls mal alles blockiert waere
+function randomDungeonSpawn() {
+  const t = randomFloorTile('dungeon');
+  return { x: t.x * TILE + TILE / 2, y: t.y * TILE + TILE / 2 };
+}
 const ARENA_SPAWN_TILE = ARENA.floor[Math.floor(ARENA.floor.length / 2)];
 const ARENA_SPAWN = { x: ARENA_SPAWN_TILE.x * TILE + TILE / 2, y: ARENA_SPAWN_TILE.y * TILE + TILE / 2 };
 
@@ -219,6 +234,7 @@ function recomputeStats(p) {
 
 const SHOP_ITEMS = {
   potion: { label: 'Heiltrank', baseCost: 12, scale: 0, maxCount: null },
+  speedpotion: { label: 'Tempo-Trank (15s +60% Tempo)', baseCost: 15, scale: 0, maxCount: null },
   dmg: { label: 'Waffe schärfen (+2 Schaden)', baseCost: 25, scale: 20, maxCount: 10 },
   hp: { label: 'Rüstung verstärken (+15 max. HP)', baseCost: 25, scale: 20, maxCount: 10 },
   speed: { label: 'Leichtere Stiefel (+Tempo)', baseCost: 30, scale: 25, maxCount: 5 }
@@ -337,7 +353,7 @@ function applyPvpDamage(target, dmg, attacker) {
 }
 
 function respawnPlayer(p) {
-  const sp = p.zone === 'arena' ? ARENA_SPAWN : SPAWN_POINT;
+  const sp = p.zone === 'arena' ? ARENA_SPAWN : randomDungeonSpawn();
   p.x = sp.x;
   p.y = sp.y;
   p.hp = p.zone === 'arena' ? p.maxHp : Math.max(1, Math.floor(p.maxHp * 0.5));
@@ -434,14 +450,15 @@ io.on('connection', (socket) => {
       }
 
       const stats = statsForLevel(account.cls, account.level);
+      const loginSpawn = randomDungeonSpawn();
       players[socket.id] = {
         id: socket.id,
         username,
         name: name || username,
         cls: account.cls,
         zone: 'dungeon',
-        x: SPAWN_POINT.x,
-        y: SPAWN_POINT.y,
+        x: loginSpawn.x,
+        y: loginSpawn.y,
         hp: stats.maxHp,
         maxHp: stats.maxHp,
         dmg: stats.dmg,
@@ -451,6 +468,8 @@ io.on('connection', (socket) => {
         xpNext: xpToNextLevel(account.level),
         gold: account.gold,
         potions: account.potions,
+        speedPotions: account.speedPotions || 0,
+        speedBoostUntil: 0,
         upgDmg: account.upgDmg || 0,
         upgHp: account.upgHp || 0,
         upgSpeed: account.upgSpeed || 0,
@@ -562,7 +581,8 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     if (!p) return;
     p.zone = 'dungeon';
-    p.x = SPAWN_POINT.x; p.y = SPAWN_POINT.y;
+    const sp = randomDungeonSpawn();
+    p.x = sp.x; p.y = sp.y;
     p.hp = p.maxHp;
     p.dead = false;
   });
@@ -605,6 +625,11 @@ io.on('connection', (socket) => {
       if (p.gold < cost) return socket.emit('shopError', 'Nicht genug Gold.');
       p.gold -= cost;
       p.potions += 1;
+    } else if (type === 'speedpotion') {
+      const cost = shopCost('speedpotion', 0);
+      if (p.gold < cost) return socket.emit('shopError', 'Nicht genug Gold.');
+      p.gold -= cost;
+      p.speedPotions += 1;
     } else {
       const countKey = type === 'dmg' ? 'upgDmg' : (type === 'hp' ? 'upgHp' : 'upgSpeed');
       const current = p[countKey];
@@ -618,6 +643,16 @@ io.on('connection', (socket) => {
       recomputeStats(p);
     }
     saveAccountProgress(p);
+  });
+
+  socket.on('useSpeedPotion', () => {
+    const p = players[socket.id];
+    if (!p || p.dead) return;
+    if (p.speedPotions > 0) {
+      p.speedPotions -= 1;
+      p.speedBoostUntil = Date.now() + 15000;
+      saveAccountProgress(p);
+    }
   });
 
   socket.on('chat', (msg) => {
@@ -734,9 +769,11 @@ function tick() {
     if (inp.left) dx -= 1;
     if (inp.right) dx += 1;
     if (dx !== 0 || dy !== 0) {
+      const boosted = Date.now() < p.speedBoostUntil;
+      const effSpeed = p.speed * (boosted ? 1.6 : 1);
       const len = Math.hypot(dx, dy);
-      dx = (dx / len) * p.speed * dtScale;
-      dy = (dy / len) * p.speed * dtScale;
+      dx = (dx / len) * effSpeed * dtScale;
+      dy = (dy / len) * effSpeed * dtScale;
       tryMove(mapFor(p.zone), p, dx, dy, 12);
     }
     if (p.zone !== 'dungeon') continue;
@@ -777,6 +814,7 @@ function tick() {
         if (now - m.lastAttack > def.cooldown) {
           m.lastAttack = now;
           target.hp -= def.dmg;
+          io.to(target.id).emit('hit', { x: target.x, y: target.y, dmg: def.dmg });
           if (target.hp <= 0 && !target.dead) {
             target.dead = true;
             setTimeout(() => respawnPlayer(target), 3000);
@@ -840,7 +878,7 @@ function broadcastState() {
     players: Object.values(players).map(p => ({
       id: p.id, name: p.name, cls: p.cls, x: p.x, y: p.y, zone: p.zone,
       hp: p.hp, maxHp: p.maxHp, level: p.level, xp: p.xp, xpNext: p.xpNext,
-      gold: p.gold, potions: p.potions, dead: p.dead,
+      gold: p.gold, potions: p.potions, speedPotions: p.speedPotions, speedBoostUntil: p.speedBoostUntil, dead: p.dead,
       upgDmg: p.upgDmg, upgHp: p.upgHp, upgSpeed: p.upgSpeed
     })),
     monsters: Object.values(monsters).map(m => ({
