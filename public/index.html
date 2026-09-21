@@ -49,6 +49,13 @@
   .barInner { height:100%; }
   #statsRow { display:flex; gap:10px; margin-top:2px; font-size:12px; color:#e6d38a; }
 
+  #hitFlash {
+    position:absolute; inset:0; z-index:9; pointer-events:none;
+    background: radial-gradient(circle, transparent 35%, #ff0000aa 100%);
+    opacity:0; transition: opacity .35s ease-out;
+  }
+  #hitFlash.active { opacity:1; transition: opacity 0s; }
+
   #deathOverlay {
     position:absolute; inset:0; background:#4a0000cc; display:none; align-items:center; justify-content:center;
     flex-direction:column; z-index:15; color:#fff; font-size:22px; text-shadow: 0 2px 4px #000;
@@ -204,6 +211,7 @@
   }
   #mAttack { background:#7a2e2e99; }
   #mPotion { background:#2e5c3299; font-size:18px; }
+  #mSpeed { background:#5c4a2e99; font-size:18px; }
 </style>
 </head>
 <body>
@@ -222,13 +230,14 @@
     <div id="statsRow">
       <span>🪙 <span id="goldTxt">0</span></span>
       <span>🧪 <span id="potionTxt">0</span> (E)</span>
+      <span>⚡ <span id="speedPotionTxt">0</span> (R)</span>
     </div>
     <div id="eventBadges" style="display:flex; gap:6px; margin-top:2px;"></div>
   </div>
 
   <div id="chatBox"></div>
   <input id="chatInput" placeholder="Enter zum Chatten..." style="display:none;">
-  <div id="hint" style="display:none;">WASD/Pfeile: Bewegen&nbsp;·&nbsp;Klick/Leertaste: Angriff&nbsp;·&nbsp;E: Trank&nbsp;·&nbsp;B: Shop&nbsp;·&nbsp;F: Truhe&nbsp;·&nbsp;Esc: Menü</div>
+  <div id="hint" style="display:none;">WASD/Pfeile: Bewegen&nbsp;·&nbsp;Klick/Leertaste: Angriff&nbsp;·&nbsp;E: Trank&nbsp;·&nbsp;R: Tempo-Trank&nbsp;·&nbsp;B: Shop&nbsp;·&nbsp;F: Truhe&nbsp;·&nbsp;Esc: Menü</div>
 
   <button id="menuBtn">☰</button>
   <div id="zoneLabel"></div>
@@ -305,9 +314,11 @@
     <div id="mobileActions">
       <div class="mBtn" id="mAttack">⚔️</div>
       <div class="mBtn" id="mPotion">🧪</div>
+      <div class="mBtn" id="mSpeed">⚡</div>
     </div>
   </div>
 
+  <div id="hitFlash"></div>
   <div id="deathOverlay"><div>💀 Du bist gefallen...</div><div style="font-size:13px; margin-top:8px; color:#eee;">Respawn in Kürze</div></div>
 
   <div id="startScreen">
@@ -362,6 +373,7 @@ if (isTouchDevice) document.body.classList.add('touch-active');
 
 const SHOP_ITEMS = {
   potion: { label: '🧪 Heiltrank', baseCost: 12, scale: 0, maxCount: null },
+  speedpotion: { label: '⚡ Tempo-Trank (15s +60% Tempo)', baseCost: 15, scale: 0, maxCount: null },
   dmg:    { label: '⚔️ Waffe schärfen (+2 Schaden)', baseCost: 25, scale: 20, maxCount: 10 },
   hp:     { label: '🛡️ Rüstung verstärken (+15 max. HP)', baseCost: 25, scale: 20, maxCount: 10 },
   speed:  { label: '👢 Leichtere Stiefel (+Tempo)', baseCost: 30, scale: 25, maxCount: 5 }
@@ -382,7 +394,7 @@ function renderShop() {
   document.getElementById('shopGold').textContent = me.gold;
   const box = document.getElementById('shopItems');
   box.innerHTML = '';
-  const countKeys = { potion: null, dmg: 'upgDmg', hp: 'upgHp', speed: 'upgSpeed' };
+  const countKeys = { potion: null, speedpotion: null, dmg: 'upgDmg', hp: 'upgHp', speed: 'upgSpeed' };
   for (const key in SHOP_ITEMS) {
     const def = SHOP_ITEMS[key];
     const count = countKeys[key] ? (me[countKeys[key]] || 0) : 0;
@@ -536,8 +548,14 @@ function startGame() {
     bindInput();
     requestAnimationFrame(loop);
   });
+  let lastOwnHp = null;
   socket.on('state', (s) => {
     world = s;
+    const meNew = s.players.find(pl => pl.id === myId);
+    if (meNew) {
+      if (lastOwnHp !== null && meNew.hp < lastOwnHp) triggerHitFlash();
+      lastOwnHp = meNew.hp;
+    }
     render();
     if (shopOpen) renderShop();
     if (pvpOpen) renderPvpPanel();
@@ -578,6 +596,7 @@ function bindInput() {
     keys[e.key.toLowerCase()] = true;
     if (e.key === ' ') { e.preventDefault(); socket.emit('attack'); }
     if (e.key.toLowerCase() === 'e') socket.emit('useItem');
+    if (e.key.toLowerCase() === 'r') socket.emit('useSpeedPotion');
     if (e.key.toLowerCase() === 'b') toggleShop();
     if (e.key.toLowerCase() === 'f') tryOpenNearestChest();
     if (e.key === 'Escape') toggleMenu();
@@ -648,8 +667,10 @@ function bindInput() {
   // ---------------- Mobile: Aktions-Buttons ----------------
   const mAttack = document.getElementById('mAttack');
   const mPotion = document.getElementById('mPotion');
+  const mSpeed = document.getElementById('mSpeed');
   mAttack.addEventListener('touchstart', (e) => { e.preventDefault(); socket.emit('attack'); }, { passive: false });
   mPotion.addEventListener('touchstart', (e) => { e.preventDefault(); socket.emit('useItem'); }, { passive: false });
+  mSpeed.addEventListener('touchstart', (e) => { e.preventDefault(); socket.emit('useSpeedPotion'); }, { passive: false });
 }
 
 function tryOpenNearestChest() {
@@ -810,6 +831,14 @@ function render() {
 
 function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
 
+function triggerHitFlash() {
+  const el = document.getElementById('hitFlash');
+  el.classList.add('active');
+  void el.offsetWidth; // Reflow erzwingen, damit die Fade-Transition sauber neu startet
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('active'), 50);
+}
+
 function drawBar(x, y, w, h, pct, color) {
   pct = Math.max(0, Math.min(1, pct));
   ctx.fillStyle = '#000000aa';
@@ -827,11 +856,14 @@ function updateHud(me) {
   document.getElementById('xpBar').style.width = (me.xp / me.xpNext) * 100 + '%';
   document.getElementById('goldTxt').textContent = me.gold;
   document.getElementById('potionTxt').textContent = me.potions;
+  document.getElementById('speedPotionTxt').textContent = me.speedPotions || 0;
   document.getElementById('deathOverlay').style.display = me.dead ? 'flex' : 'none';
 
   const badgeBox = document.getElementById('eventBadges');
   const ev = world.events || {};
   const badges = [];
+  const boostLeft = (me.speedBoostUntil || 0) - Date.now();
+  if (boostLeft > 0) badges.push(`<span style="background:#3a2f10; color:#ffd166; padding:2px 8px; border-radius:10px; font-size:10px;">⚡ Tempo ${Math.ceil(boostLeft / 1000)}s</span>`);
   if (ev.goldRemaining > 0) badges.push(`<span style="background:#3a2f0f; color:#f2c94c; padding:2px 8px; border-radius:10px; font-size:10px;">💰 x2 Gold ${Math.ceil(ev.goldRemaining / 1000)}s</span>`);
   if (ev.xpRemaining > 0) badges.push(`<span style="background:#0f2c3a; color:#6fd1ff; padding:2px 8px; border-radius:10px; font-size:10px;">✨ x2 XP ${Math.ceil(ev.xpRemaining / 1000)}s</span>`);
   if (ev.bossAlive) badges.push(`<span style="background:#3a0f0f; color:#ff8a8a; padding:2px 8px; border-radius:10px; font-size:10px;">👑 Boss aktiv</span>`);
