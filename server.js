@@ -141,7 +141,7 @@ function generateDungeon(gridW, gridH, cellSize) {
 }
 
 // 100 x 50 Raster à 10 Felder -> ca. 1001 x 501 Felder Gesamtkarte
-const MAP_ROWS = generateDungeon(100, 50, 10);
+const MAP_ROWS = generateDungeon(10, 50, 10);
 const MAP_W = MAP_ROWS[0].length;
 const MAP_H = MAP_ROWS.length;
 
