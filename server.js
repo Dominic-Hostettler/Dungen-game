@@ -265,7 +265,7 @@ const MAX_MONSTERS = 300;
 
 function spawnMonster() {
   if (Object.keys(monsters).length >= MAX_MONSTERS) return;
-  const type = Math.random() < 0.7 ? 'goblin' : 'ork';
+  const type = Math.random() < 0.7 ? 'goblin' : 'ork' : 'toter';
   const def = MONSTER_TYPES[type];
   const tile = randomFloorTile('dungeon');
   const id = 'm' + (monsterIdCounter++);
