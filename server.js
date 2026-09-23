@@ -74,7 +74,7 @@ async function saveAccountProgress(p) {
 
 // ---------------- Konfiguration ----------------
 const TILE = 32;
-const TICK_RATE = 20; // Server-Ticks pro Sekunde
+const TICK_RATE = 60; // Server-Ticks pro Sekunde
 const MAX_PLAYERS_PER_DUNGEON = 6;
 
 // Dungeon-Layout: 1 = Wand, 0 = Boden
