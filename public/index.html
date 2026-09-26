@@ -137,6 +137,34 @@
     background:#2a2f3a; color:#ddd; cursor:pointer; font-size:12px;
   }
 
+  #bossroomPanel, #playersPanel {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    background: var(--panel); border:2px solid #2a2f3a; border-radius:14px;
+    padding:22px 24px; width:320px; max-width:88vw; z-index:26; display:none;
+    box-shadow: 0 10px 40px rgba(0,0,0,.6);
+  }
+  #bossroomPanel h2, #playersPanel h2 { margin:0 0 4px; color:var(--accent); font-size:18px; text-align:center; }
+  #bossroomPanel p.sub, #playersPanel p.sub { margin:0 0 14px; text-align:center; color:#9aa2b1; font-size:12px; }
+  #bossroomStatus { text-align:center; font-size:13px; margin-bottom:12px; color:#e6d38a; }
+  #bossroomToggleBtn {
+    width:100%; padding:11px; border:none; border-radius:8px; font-size:14px; font-weight:bold;
+    background: linear-gradient(180deg,#f0d27a,#c99a3a); color:#241a05; cursor:pointer; margin-bottom:8px;
+  }
+  #bossroomClose, #playersClose {
+    width:100%; padding:8px; border:none; border-radius:8px;
+    background:#2a2f3a; color:#ddd; cursor:pointer; font-size:12px;
+  }
+  #playersList { max-height:220px; overflow-y:auto; margin-bottom:10px; }
+  .playerRow {
+    display:flex; justify-content:space-between; align-items:center;
+    background:#0d1117; border:1px solid #2a2f3a; border-radius:8px;
+    padding:8px 10px; margin-bottom:6px; font-size:12px;
+  }
+  .playerRow button {
+    padding:6px 10px; border:none; border-radius:6px; font-size:11px; cursor:pointer;
+    background: linear-gradient(180deg,#f0d27a,#c99a3a); color:#241a05; font-weight:bold;
+  }
+
   #interactBtn {
     position:absolute; bottom:110px; left:50%; transform:translateX(-50%);
     z-index:12; padding:10px 16px; border-radius:20px; border:none;
@@ -156,6 +184,7 @@
   }
   #zoneLabel.arena { color:#ff8a8a; border:1px solid #ff8a8a55; }
   #zoneLabel.dungeon { color:#9ad1ff; border:1px solid #9ad1ff55; }
+  #zoneLabel.bossroom { color:#ffd766; border:1px solid #ffd76655; }
 
   #adminPanel {
     position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
@@ -248,6 +277,8 @@
     <h2>Menü</h2>
     <button class="menuOption" id="menuOptionShop">🏪 Shop</button>
     <button class="menuOption" id="menuOptionPvp">⚔️ PvP-Lobby</button>
+    <button class="menuOption" id="menuOptionBossroom">👑 Boss-Raum</button>
+    <button class="menuOption" id="menuOptionPlayers">🧭 Zu Spieler teleportieren</button>
     <button class="menuOption" id="menuOptionAdmin" style="display:none;">👑 Admin-Panel</button>
     <button class="menuOption" id="menuOptionClose">▶️ Weiterspielen</button>
     <button class="menuOption" id="menuOptionLeave">🚪 Spiel verlassen</button>
@@ -301,6 +332,21 @@
     <button id="pvpClose">Schliessen</button>
   </div>
 
+  <div id="bossroomPanel">
+    <h2>👑 Boss-Raum</h2>
+    <p class="sub">Alle 10 Minuten erscheint der Dungeon-Wächter im Boss-Raum. Kämpft gemeinsam gegen ihn!</p>
+    <div id="bossroomStatus">Boss-Status: unbekannt</div>
+    <button id="bossroomToggleBtn">Zum Boss teleportieren</button>
+    <button id="bossroomClose">Schliessen</button>
+  </div>
+
+  <div id="playersPanel">
+    <h2>🧭 Zu Spieler teleportieren</h2>
+    <p class="sub">Wähle einen Spieler, um direkt zu ihm zu teleportieren.</p>
+    <div id="playersList"></div>
+    <button id="playersClose">Schliessen</button>
+  </div>
+
   <div id="shopPanel">
     <h2>🏪 Shop</h2>
     <p class="sub">Gold: <span id="shopGold">0</span></p>
@@ -342,9 +388,6 @@
         <div class="classBtn" data-cls="magier">
           <span class="icon">🔮</span>Magier<small>Fernkampf, fragil</small>
         </div>
-        <div class="classBtn" data-cls="bow">
-          <span class="icon">🏹</span>Bogenschütze<small>Fernkampf</small>
-        </div>
         <div class="classBtn" data-cls="schurke">
           <span class="icon">🗡️</span>Schurke<small>Schnell, Krit-Chance</small>
         </div>
@@ -363,7 +406,7 @@ function resize() { canvas.width = window.innerWidth; canvas.height = window.inn
 window.addEventListener('resize', resize); resize();
 
 let socket = null;
-let TILE = 32, MAP = [], ARENA_MAP = [], myId = null, CLASSES = {};
+let TILE = 32, MAP = [], ARENA_MAP = [], BOSSROOM_MAP = [], myId = null, CLASSES = {};
 let world = { players: [], monsters: [], items: [], chests: [], projectiles: [], events: {} };
 let selectedClass = 'krieger';
 let hitFx = [];
@@ -377,9 +420,9 @@ if (isTouchDevice) document.body.classList.add('touch-active');
 const SHOP_ITEMS = {
   potion: { label: '🧪 Heiltrank', baseCost: 12, scale: 0, maxCount: null },
   speedpotion: { label: '⚡ Tempo-Trank (15s +60% Tempo)', baseCost: 15, scale: 0, maxCount: null },
-  dmg:    { label: '⚔️ Waffe schärfen (+2 Schaden)', baseCost: 25, scale: 20, maxCount: 100 },
-  hp:     { label: '🛡️ Rüstung verstärken (+15 max. HP)', baseCost: 25, scale: 20, maxCount: 100 },
-  speed:  { label: '👢 Leichtere Stiefel (+Tempo)', baseCost: 30, scale: 25, maxCount: 10 }
+  dmg:    { label: '⚔️ Waffe schärfen (+2 Schaden)', baseCost: 25, scale: 20, maxCount: 10 },
+  hp:     { label: '🛡️ Rüstung verstärken (+15 max. HP)', baseCost: 25, scale: 20, maxCount: 10 },
+  speed:  { label: '👢 Leichtere Stiefel (+Tempo)', baseCost: 30, scale: 25, maxCount: 5 }
 };
 function shopCostClient(key, count) {
   const d = SHOP_ITEMS[key];
@@ -425,6 +468,8 @@ document.getElementById('menuBtn').addEventListener('click', () => toggleMenu())
 document.getElementById('menuOptionClose').addEventListener('click', () => toggleMenu(false));
 document.getElementById('menuOptionShop').addEventListener('click', () => { toggleMenu(false); toggleShop(true); });
 document.getElementById('menuOptionPvp').addEventListener('click', () => { toggleMenu(false); togglePvpPanel(true); });
+document.getElementById('menuOptionBossroom').addEventListener('click', () => { toggleMenu(false); toggleBossroomPanel(true); });
+document.getElementById('menuOptionPlayers').addEventListener('click', () => { toggleMenu(false); togglePlayersPanel(true); });
 document.getElementById('menuOptionAdmin').addEventListener('click', () => { toggleMenu(false); toggleAdminPanel(true); });
 document.getElementById('menuOptionLeave').addEventListener('click', () => {
   if (confirm('Spiel wirklich verlassen?')) {
@@ -458,6 +503,67 @@ document.getElementById('pvpToggleBtn').addEventListener('click', () => {
   setTimeout(renderPvpPanel, 150);
 });
 document.getElementById('pvpClose').addEventListener('click', () => togglePvpPanel(false));
+
+// ---------------- Boss-Raum ----------------
+let bossroomOpen = false;
+function toggleBossroomPanel(force) {
+  bossroomOpen = (typeof force === 'boolean') ? force : !bossroomOpen;
+  document.getElementById('bossroomPanel').style.display = bossroomOpen ? 'block' : 'none';
+  if (bossroomOpen) renderBossroomPanel();
+}
+function renderBossroomPanel() {
+  const me = world.players.find(p => p.id === myId);
+  if (!me) return;
+  const bossAlive = !!(world.events && world.events.bossAlive);
+  document.getElementById('bossroomStatus').textContent = bossAlive
+    ? '👑 Der Boss ist aktiv!'
+    : '💤 Kein Boss aktiv – erscheint alle 10 Minuten.';
+  const btn = document.getElementById('bossroomToggleBtn');
+  if (me.zone === 'bossroom') {
+    btn.textContent = 'Boss-Raum verlassen';
+    btn.disabled = false;
+  } else {
+    btn.textContent = 'Zum Boss teleportieren';
+    btn.disabled = !bossAlive;
+  }
+}
+document.getElementById('bossroomToggleBtn').addEventListener('click', () => {
+  const me = world.players.find(p => p.id === myId);
+  if (!me) return;
+  socket.emit(me.zone === 'bossroom' ? 'leaveBossRoom' : 'joinBossRoom');
+  setTimeout(renderBossroomPanel, 150);
+});
+document.getElementById('bossroomClose').addEventListener('click', () => toggleBossroomPanel(false));
+
+// ---------------- Spieler-Teleport ----------------
+let playersPanelOpen = false;
+function togglePlayersPanel(force) {
+  playersPanelOpen = (typeof force === 'boolean') ? force : !playersPanelOpen;
+  document.getElementById('playersPanel').style.display = playersPanelOpen ? 'block' : 'none';
+  if (playersPanelOpen) renderPlayersPanel();
+}
+const ZONE_LABELS = { dungeon: '🏰 Dungeon', arena: '⚔️ Arena', bossroom: '👑 Boss-Raum' };
+function renderPlayersPanel() {
+  const list = document.getElementById('playersList');
+  const others = world.players.filter(p => p.id !== myId);
+  if (!others.length) {
+    list.innerHTML = '<div style="color:#9aa2b1; font-size:12px;">Aktuell ist niemand sonst online.</div>';
+    return;
+  }
+  list.innerHTML = others.map(p => `
+    <div class="playerRow">
+      <span>${p.name} (Lv${p.level}) · ${ZONE_LABELS[p.zone] || p.zone}</span>
+      <button data-id="${p.id}">Teleportieren</button>
+    </div>
+  `).join('');
+  list.querySelectorAll('button[data-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      socket.emit('teleportToPlayer', { targetId: btn.dataset.id });
+      togglePlayersPanel(false);
+    });
+  });
+}
+document.getElementById('playersClose').addEventListener('click', () => togglePlayersPanel(false));
 
 // ---------------- Admin-Panel ----------------
 let adminOpen = false;
@@ -539,7 +645,7 @@ function startGame() {
     document.getElementById('playBtn').disabled = false;
   });
   socket.on('init', (data) => {
-    myId = data.you; MAP = data.map; ARENA_MAP = data.arenaMap; TILE = data.tile; CLASSES = data.classes;
+    myId = data.you; MAP = data.map; ARENA_MAP = data.arenaMap; BOSSROOM_MAP = data.bossRoomMap; TILE = data.tile; CLASSES = data.classes;
     isAdmin = !!data.isAdmin;
     document.getElementById('startScreen').style.display = 'none';
     document.getElementById('hud').style.display = 'flex';
@@ -713,9 +819,9 @@ function render() {
   if (!me) return;
 
   currentZone = me.zone || 'dungeon';
-  const activeMap = currentZone === 'arena' ? ARENA_MAP : MAP;
+  const activeMap = currentZone === 'arena' ? ARENA_MAP : (currentZone === 'bossroom' ? BOSSROOM_MAP : MAP);
   const zoneLbl = document.getElementById('zoneLabel');
-  zoneLbl.textContent = currentZone === 'arena' ? '⚔️ PvP-Arena' : '🏰 Dungeon';
+  zoneLbl.textContent = currentZone === 'arena' ? '⚔️ PvP-Arena' : (currentZone === 'bossroom' ? '👑 Boss-Raum' : '🏰 Dungeon');
   zoneLbl.className = currentZone;
 
   const camX = me.x - canvas.width / 2;
@@ -743,17 +849,18 @@ function render() {
     }
   }
 
-  if (currentZone === 'dungeon') {
-    // Items
-    for (const it of world.items) {
-      const sx = it.x - camX, sy = it.y - camY;
-      ctx.beginPath();
-      ctx.arc(sx, sy, 7, 0, Math.PI * 2);
-      ctx.fillStyle = it.type === 'gold' ? '#f2c94c' : '#e05fd0';
-      ctx.fill();
-    }
+  // Items (passend zur aktuellen Zone: Dungeon- oder Boss-Raum-Loot)
+  for (const it of world.items) {
+    if ((it.zone || 'dungeon') !== currentZone) continue;
+    const sx = it.x - camX, sy = it.y - camY;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 7, 0, Math.PI * 2);
+    ctx.fillStyle = it.type === 'gold' ? '#f2c94c' : '#e05fd0';
+    ctx.fill();
+  }
 
-    // Truhen
+  if (currentZone === 'dungeon') {
+    // Truhen (nur im Dungeon)
     nearestChestId = null;
     let nearestChestDist = Infinity;
     for (const c of world.chests) {
@@ -767,9 +874,14 @@ function render() {
       }
     }
     document.getElementById('interactBtn').style.display = nearestChestId ? 'block' : 'none';
+  } else {
+    document.getElementById('interactBtn').style.display = 'none';
+  }
 
-    // Monster
+  if (currentZone === 'dungeon' || currentZone === 'bossroom') {
+    // Monster (im Dungeon oder im Boss-Raum, je nach eigener Zone)
     for (const m of world.monsters) {
+      if ((m.zone || 'dungeon') !== currentZone) continue;
       const sx = m.x - camX, sy = m.y - camY;
       const isBoss = m.type === 'boss';
       const radius = isBoss ? 30 : (m.type === 'ork' ? 15 : 11);
@@ -788,8 +900,6 @@ function render() {
         drawBar(sx - 16, sy - (m.type === 'ork' ? 26 : 20), 32, 4, m.hp / m.maxHp, '#e74c3c');
       }
     }
-  } else {
-    document.getElementById('interactBtn').style.display = 'none';
   }
 
   // Projektile
