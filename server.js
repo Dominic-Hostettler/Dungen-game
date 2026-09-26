@@ -171,6 +171,9 @@ function makeArena(w, h) {
 const ARENA_ROWS = makeArena(20, 13);
 const ARENA_W = ARENA_ROWS[0].length;
 const ARENA_H = ARENA_ROWS.length;
+const BOSSROOM_ROWS = makeArena(24, 16);
+const BOSSROOM_W = BOSSROOM_ROWS[0].length;
+const BOSSROOM_H = BOSSROOM_ROWS.length;
 
 function buildMapInfo(rows, w, h) {
   function isWall(tx, ty) {
@@ -189,7 +192,12 @@ function buildMapInfo(rows, w, h) {
 
 const DUNGEON = buildMapInfo(MAP_ROWS, MAP_W, MAP_H);
 const ARENA = buildMapInfo(ARENA_ROWS, ARENA_W, ARENA_H);
-function mapFor(zone) { return zone === 'arena' ? ARENA : DUNGEON; }
+const BOSSROOM = buildMapInfo(BOSSROOM_ROWS, BOSSROOM_W, BOSSROOM_H);
+function mapFor(zone) {
+  if (zone === 'arena') return ARENA;
+  if (zone === 'bossroom') return BOSSROOM;
+  return DUNGEON;
+}
 
 function isWall(tx, ty) { return DUNGEON.isWall(tx, ty); }
 function isFloor(tx, ty) { return DUNGEON.isFloor(tx, ty); }
@@ -207,13 +215,16 @@ function randomDungeonSpawn() {
 }
 const ARENA_SPAWN_TILE = ARENA.floor[Math.floor(ARENA.floor.length / 2)];
 const ARENA_SPAWN = { x: ARENA_SPAWN_TILE.x * TILE + TILE / 2, y: ARENA_SPAWN_TILE.y * TILE + TILE / 2 };
+const BOSSROOM_ENTRY_TILE = BOSSROOM.floor[Math.floor(BOSSROOM.floor.length * 0.15)];
+const BOSSROOM_ENTRY = { x: BOSSROOM_ENTRY_TILE.x * TILE + TILE / 2, y: BOSSROOM_ENTRY_TILE.y * TILE + TILE / 2 };
+const BOSSROOM_CENTER_TILE = BOSSROOM.floor[Math.floor(BOSSROOM.floor.length / 2)];
+const BOSSROOM_CENTER = { x: BOSSROOM_CENTER_TILE.x * TILE + TILE / 2, y: BOSSROOM_CENTER_TILE.y * TILE + TILE / 2 };
 
 // ---------------- Klassen-Definitionen ----------------
 const CLASSES = {
   krieger: { name: 'Krieger', maxHp: 150, speed: 2.4, dmg: 18, range: 42, cooldown: 500, kind: 'melee', color: '#e74c3c' },
   magier:  { name: 'Magier',  maxHp: 80,  speed: 2.1, dmg: 24, range: 240, cooldown: 750, kind: 'ranged', color: '#3498db' },
-  schurke: { name: 'Schurke', maxHp: 100, speed: 3.0, dmg: 13, range: 36, cooldown: 320, kind: 'melee', color: '#2ecc71', crit: 0.25 },
-  bow:  { name: 'Bogenschütze',  maxHp: 90,  speed: 2.1, dmg: 20, range: 240, cooldown: 750, kind: 'ranged', color: '#09e01f' }
+  schurke: { name: 'Schurke', maxHp: 100, speed: 3.0, dmg: 13, range: 36, cooldown: 320, kind: 'melee', color: '#2ecc71', crit: 0.25 }
 };
 
 function statsForLevel(clsKey, level) {
@@ -236,9 +247,9 @@ function recomputeStats(p) {
 const SHOP_ITEMS = {
   potion: { label: 'Heiltrank', baseCost: 12, scale: 0, maxCount: null },
   speedpotion: { label: 'Tempo-Trank (15s +60% Tempo)', baseCost: 15, scale: 0, maxCount: null },
-  dmg: { label: 'Waffe schärfen (+2 Schaden)', baseCost: 25, scale: 20, maxCount: 100 },
-  hp: { label: 'Rüstung verstärken (+15 max. HP)', baseCost: 25, scale: 20, maxCount: 100 },
-  speed: { label: 'Leichtere Stiefel (+Tempo)', baseCost: 30, scale: 25, maxCount: 10 }
+  dmg: { label: 'Waffe schärfen (+2 Schaden)', baseCost: 25, scale: 20, maxCount: 10 },
+  hp: { label: 'Rüstung verstärken (+15 max. HP)', baseCost: 25, scale: 20, maxCount: 10 },
+  speed: { label: 'Leichtere Stiefel (+Tempo)', baseCost: 30, scale: 25, maxCount: 5 }
 };
 function shopCost(itemKey, currentCount) {
   const def = SHOP_ITEMS[itemKey];
@@ -256,8 +267,8 @@ let itemIdCounter = 0;
 let projectileIdCounter = 0;
 
 const MONSTER_TYPES = {
-  goblin: { hp: 40, dmg: 8, speed: 1.3, xp: 15, range: 30, cooldown: 900, color: '#8e7c4d', radius: 12, name: 'Goblin' },
-  ork:    { hp: 95, dmg: 16, speed: 0.9, xp: 40, range: 34, cooldown: 1200, color: '#5b4636', radius: 16, name: 'Ork' },
+  goblin: { hp: 40, dmg: 8, speed: 1.3, xp: 15, range: 30, cooldown: 900, color: '#8e7c4d', radius: 12 },
+  ork:    { hp: 95, dmg: 16, speed: 0.9, xp: 40, range: 34, cooldown: 1200, color: '#5b4636', radius: 16 },
   boss:   { hp: 900, dmg: 32, speed: 1.0, xp: 400, range: 48, cooldown: 900, color: '#c0392b', radius: 26, name: 'Dungeon-Wächter' }
 };
 const MAX_MONSTERS = 300;
@@ -269,7 +280,7 @@ function spawnMonster() {
   const tile = randomFloorTile('dungeon');
   const id = 'm' + (monsterIdCounter++);
   monsters[id] = {
-    id, type,
+    id, type, zone: 'dungeon',
     x: tile.x * TILE + TILE / 2,
     y: tile.y * TILE + TILE / 2,
     hp: def.hp, maxHp: def.hp,
@@ -280,12 +291,12 @@ function spawnMonster() {
   };
 }
 
-function spawnItem(x, y) {
+function spawnItem(x, y, zone) {
   const roll = Math.random();
   const type = roll < 0.6 ? 'gold' : 'potion';
   const id = 'i' + (itemIdCounter++);
   const amount = type === 'gold' ? Math.round((5 + Math.floor(Math.random() * 15)) * goldMult()) : 1;
-  items[id] = { id, type, x, y, amount };
+  items[id] = { id, type, x, y, amount, zone: zone || 'dungeon' };
 }
 
 // Initiale Monster
@@ -354,10 +365,13 @@ function applyPvpDamage(target, dmg, attacker) {
 }
 
 function respawnPlayer(p) {
-  const sp = p.zone === 'arena' ? ARENA_SPAWN : randomDungeonSpawn();
+  let sp;
+  if (p.zone === 'arena') sp = ARENA_SPAWN;
+  else if (p.zone === 'bossroom') sp = BOSSROOM_ENTRY;
+  else sp = randomDungeonSpawn();
   p.x = sp.x;
   p.y = sp.y;
-  p.hp = p.zone === 'arena' ? p.maxHp : Math.max(1, Math.floor(p.maxHp * 0.5));
+  p.hp = p.zone === 'dungeon' ? Math.max(1, Math.floor(p.maxHp * 0.5)) : p.maxHp;
   p.dead = false;
 }
 
@@ -379,18 +393,17 @@ function grantXp(p, amount) {
 const BOSS_INTERVAL_MS = 10 * 60 * 1000;
 let bossId = null;
 function spawnBoss() {
-  const tile = randomFloorTile('dungeon');
   const id = 'boss' + Date.now();
   monsters[id] = {
-    id, type: 'boss',
-    x: tile.x * TILE + TILE / 2,
-    y: tile.y * TILE + TILE / 2,
+    id, type: 'boss', zone: 'bossroom',
+    x: BOSSROOM_CENTER.x,
+    y: BOSSROOM_CENTER.y,
     hp: MONSTER_TYPES.boss.hp, maxHp: MONSTER_TYPES.boss.hp,
     lastAttack: 0, targetId: null,
-    homeX: tile.x * TILE + TILE / 2, homeY: tile.y * TILE + TILE / 2
+    homeX: BOSSROOM_CENTER.x, homeY: BOSSROOM_CENTER.y
   };
   bossId = id;
-  io.emit('announcement', `👑 Der ${MONSTER_TYPES.boss.name} ist erschienen! Findet ihn im Dungeon!`);
+  io.emit('announcement', `👑 Der ${MONSTER_TYPES.boss.name} ist im Boss-Raum erschienen! Teleportiere dich über das Menü dorthin!`);
 }
 function bossCycle() {
   if (bossId && monsters[bossId]) delete monsters[bossId];
@@ -404,11 +417,11 @@ setTimeout(() => {
 function onMonsterKilled(m, killer) {
   if (m.type === 'boss') {
     bossId = null;
-    for (let i = 0; i < 4; i++) spawnItem(m.x + (Math.random() * 40 - 20), m.y + (Math.random() * 40 - 20));
+    for (let i = 0; i < 4; i++) spawnItem(m.x + (Math.random() * 40 - 20), m.y + (Math.random() * 40 - 20), 'bossroom');
     if (killer) killer.potions += 2;
     io.emit('announcement', `🏆 ${killer ? killer.name : 'Jemand'} hat den Boss besiegt! Riesiger Loot-Regen!`);
   } else {
-    spawnItem(m.x, m.y);
+    spawnItem(m.x, m.y, 'dungeon');
   }
   if (killer) grantXp(killer, MONSTER_TYPES[m.type].xp);
 }
@@ -486,6 +499,7 @@ io.on('connection', (socket) => {
         you: socket.id,
         map: MAP_ROWS,
         arenaMap: ARENA_ROWS,
+        bossRoomMap: BOSSROOM_ROWS,
         tile: TILE,
         classes: CLASSES,
         isAdmin: players[socket.id].isAdmin
@@ -545,6 +559,7 @@ io.on('connection', (socket) => {
       let closest = null, closestDist = Infinity;
       for (const id in monsters) {
         const m = monsters[id];
+        if ((m.zone || 'dungeon') !== p.zone) continue;
         const d = dist(p.x, p.y, m.x, m.y);
         if (d < def.range && d < closestDist) { closest = m; closestDist = d; }
       }
@@ -562,7 +577,7 @@ io.on('connection', (socket) => {
       const id = 'pr' + (projectileIdCounter++);
       const angle = Math.atan2(p.input.aimY, p.input.aimX) || 0;
       projectiles[id] = {
-        id, ownerId: p.id, zone: 'dungeon',
+        id, ownerId: p.id, zone: p.zone,
         x: p.x, y: p.y,
         vx: Math.cos(angle) * 6, vy: Math.sin(angle) * 6,
         dmg: p.dmg, life: 60
@@ -586,6 +601,35 @@ io.on('connection', (socket) => {
     p.x = sp.x; p.y = sp.y;
     p.hp = p.maxHp;
     p.dead = false;
+  });
+
+  socket.on('joinBossRoom', () => {
+    const p = players[socket.id];
+    if (!p || p.dead) return;
+    if (!bossId || !monsters[bossId]) return socket.emit('shopError', 'Aktuell ist kein Boss aktiv.');
+    p.zone = 'bossroom';
+    p.x = BOSSROOM_ENTRY.x; p.y = BOSSROOM_ENTRY.y;
+    p.hp = p.maxHp;
+  });
+
+  socket.on('leaveBossRoom', () => {
+    const p = players[socket.id];
+    if (!p) return;
+    p.zone = 'dungeon';
+    const sp = randomDungeonSpawn();
+    p.x = sp.x; p.y = sp.y;
+    p.hp = p.maxHp;
+    p.dead = false;
+  });
+
+  socket.on('teleportToPlayer', (data) => {
+    const p = players[socket.id];
+    const target = players[data && data.targetId];
+    if (!p || !target || p.dead || target.id === p.id) return;
+    p.zone = target.zone;
+    p.x = target.x + (Math.random() * 30 - 15);
+    p.y = target.y + (Math.random() * 30 - 15);
+    if (circleHitsWall(mapFor(p.zone), p.x, p.y, 12)) { p.x = target.x; p.y = target.y; }
   });
 
   socket.on('openChest', (data) => {
@@ -777,10 +821,11 @@ function tick() {
       dy = (dy / len) * effSpeed * dtScale;
       tryMove(mapFor(p.zone), p, dx, dy, 12);
     }
-    if (p.zone !== 'dungeon') continue;
-    // Items einsammeln
+    if (p.zone !== 'dungeon' && p.zone !== 'bossroom') continue;
+    // Items einsammeln (nur passend zur eigenen Zone)
     for (const iid in items) {
       const it = items[iid];
+      if ((it.zone || 'dungeon') !== p.zone) continue;
       if (dist(p.x, p.y, it.x, it.y) < 20) {
         if (it.type === 'gold') p.gold += it.amount;
         else if (it.type === 'potion') p.potions += 1;
@@ -798,10 +843,12 @@ function tick() {
   // Monster-KI
   for (const id in monsters) {
     const m = monsters[id];
+    const mZone = m.zone || 'dungeon';
+    const mMap = mapFor(mZone);
     let target = null, targetDist = Infinity;
     for (const pid in players) {
       const p = players[pid];
-      if (p.dead || p.zone !== 'dungeon') continue;
+      if (p.dead || p.zone !== mZone) continue;
       const d = dist(m.x, m.y, p.x, p.y);
       if (d < 180 && d < targetDist) { target = p; targetDist = d; }
     }
@@ -809,7 +856,7 @@ function tick() {
       const def = MONSTER_TYPES[m.type];
       if (targetDist > def.range) {
         const angle = Math.atan2(target.y - m.y, target.x - m.x);
-        tryMove(DUNGEON, m, Math.cos(angle) * def.speed, Math.sin(angle) * def.speed, def.radius);
+        tryMove(mMap, m, Math.cos(angle) * def.speed, Math.sin(angle) * def.speed, def.radius);
       } else {
         const now = Date.now();
         if (now - m.lastAttack > def.cooldown) {
@@ -827,7 +874,7 @@ function tick() {
       const d = dist(m.x, m.y, m.homeX, m.homeY);
       if (d > 10) {
         const angle = Math.atan2(m.homeY - m.y, m.homeX - m.x);
-        tryMove(DUNGEON, m, Math.cos(angle) * 0.6, Math.sin(angle) * 0.6, MONSTER_TYPES[m.type].radius);
+        tryMove(mMap, m, Math.cos(angle) * 0.6, Math.sin(angle) * 0.6, MONSTER_TYPES[m.type].radius);
       }
     }
   }
@@ -856,6 +903,7 @@ function tick() {
     } else if (!hitSomething) {
       for (const mid in monsters) {
         const m = monsters[mid];
+        if ((m.zone || 'dungeon') !== pr.zone) continue;
         if (dist(pr.x, pr.y, m.x, m.y) < 16) {
           m.hp -= pr.dmg;
           io.emit('hit', { x: m.x, y: m.y, dmg: pr.dmg });
@@ -883,7 +931,7 @@ function broadcastState() {
       upgDmg: p.upgDmg, upgHp: p.upgHp, upgSpeed: p.upgSpeed
     })),
     monsters: Object.values(monsters).map(m => ({
-      id: m.id, type: m.type, x: m.x, y: m.y, hp: m.hp, maxHp: m.maxHp
+      id: m.id, type: m.type, zone: m.zone || 'dungeon', x: m.x, y: m.y, hp: m.hp, maxHp: m.maxHp
     })),
     items: Object.values(items),
     chests: Object.values(chests).map(c => ({ id: c.id, x: c.x, y: c.y, looted: c.looted })),
