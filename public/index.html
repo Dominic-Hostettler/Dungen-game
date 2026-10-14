@@ -178,6 +178,19 @@
     padding:8px 16px; border-radius:8px; font-size:13px; font-weight:bold; display:none;
   }
 
+  #tpaBox {
+    position:absolute; top:70px; left:50%; transform:translateX(-50%);
+    z-index:28; background:#0d1117ee; border:2px solid var(--accent); color:#eee;
+    padding:14px 18px; border-radius:10px; font-size:13px; display:none;
+    text-align:center; box-shadow:0 6px 24px rgba(0,0,0,.5); min-width:220px;
+  }
+  #tpaBox .tpaBtns { display:flex; gap:8px; margin-top:10px; }
+  #tpaBox button {
+    flex:1; padding:7px; border:none; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer;
+  }
+  #tpaAccept { background: linear-gradient(180deg,#8ee08e,#4caf50); color:#0a2f0a; }
+  #tpaDeny { background:#4a2a2a; color:#ffb3b3; }
+
   #zoneLabel {
     position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:10;
     font-size:12px; padding:4px 12px; border-radius:12px; background:#0009; display:none;
@@ -271,6 +284,13 @@
   <button id="menuBtn">☰</button>
   <div id="zoneLabel"></div>
   <div id="lootToast"></div>
+  <div id="tpaBox">
+    <div id="tpaText">Anfrage von ...</div>
+    <div class="tpaBtns">
+      <button id="tpaAccept">✅ Annehmen</button>
+      <button id="tpaDeny">❌ Ablehnen</button>
+    </div>
+  </div>
   <button id="interactBtn">📦 Truhe öffnen (F)</button>
 
   <div id="menuPanel">
@@ -413,6 +433,7 @@ let hitFx = [];
 let currentZone = 'dungeon';
 let nearestChestId = null;
 let isAdmin = false;
+let pendingTpaFromId = null;
 
 const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 if (isTouchDevice) document.body.classList.add('touch-active');
@@ -553,17 +574,30 @@ function renderPlayersPanel() {
   list.innerHTML = others.map(p => `
     <div class="playerRow">
       <span>${p.name} (Lv${p.level}) · ${ZONE_LABELS[p.zone] || p.zone}</span>
-      <button data-id="${p.id}">Teleportieren</button>
+      <button data-id="${p.id}">Anfrage senden</button>
     </div>
   `).join('');
   list.querySelectorAll('button[data-id]').forEach(btn => {
     btn.addEventListener('click', () => {
-      socket.emit('teleportToPlayer', { targetId: btn.dataset.id });
+      socket.emit('teleportRequest', { targetId: btn.dataset.id });
       togglePlayersPanel(false);
     });
   });
 }
 document.getElementById('playersClose').addEventListener('click', () => togglePlayersPanel(false));
+
+document.getElementById('tpaAccept').addEventListener('click', () => {
+  if (!pendingTpaFromId) return;
+  socket.emit('tpaAccept', { fromId: pendingTpaFromId });
+  document.getElementById('tpaBox').style.display = 'none';
+  pendingTpaFromId = null;
+});
+document.getElementById('tpaDeny').addEventListener('click', () => {
+  if (!pendingTpaFromId) return;
+  socket.emit('tpaDeny', { fromId: pendingTpaFromId });
+  document.getElementById('tpaBox').style.display = 'none';
+  pendingTpaFromId = null;
+});
 
 // ---------------- Admin-Panel ----------------
 let adminOpen = false;
@@ -690,6 +724,27 @@ function startGame() {
     addChat(text);
     clearTimeout(toast._t);
     toast._t = setTimeout(() => { toast.style.display = 'none'; }, 4500);
+  });
+
+  socket.on('tpaIncoming', (r) => {
+    pendingTpaFromId = r.fromId;
+    document.getElementById('tpaText').textContent = `🧭 ${r.fromName} möchte zu dir teleportieren`;
+    document.getElementById('tpaBox').style.display = 'block';
+    clearTimeout(document.getElementById('tpaBox')._t);
+    document.getElementById('tpaBox')._t = setTimeout(() => {
+      document.getElementById('tpaBox').style.display = 'none';
+      pendingTpaFromId = null;
+    }, 30000);
+  });
+  socket.on('tpaSent', (r) => {
+    addChat(`🧭 Anfrage an ${r.targetName} gesendet...`);
+  });
+  socket.on('tpaResult', (r) => {
+    if (r.asTarget) {
+      addChat(`🧭 Du hast ${r.otherName} zu dir teleportiert.`);
+    } else {
+      addChat(r.accepted ? `🧭 ${r.otherName} hat deine Anfrage angenommen!` : `🧭 ${r.otherName} hat deine Anfrage abgelehnt.`);
+    }
   });
 
   socket.emit('auth', { mode: authMode, username, password, name, cls: selectedClass });
