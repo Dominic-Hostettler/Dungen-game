@@ -259,6 +259,7 @@ function shopCost(itemKey, currentCount) {
 // ---------------- Game-State ----------------
 const players = {};     // id -> player
 const monsters = {};    // id -> monster
+const tpaRequests = {}; // targetSocketId -> { fromId, expiresAt }
 const items = {};       // id -> ground item
 const projectiles = {}; // id -> projectile
 
@@ -622,14 +623,42 @@ io.on('connection', (socket) => {
     p.dead = false;
   });
 
-  socket.on('teleportToPlayer', (data) => {
+  socket.on('teleportRequest', (data) => {
     const p = players[socket.id];
     const target = players[data && data.targetId];
     if (!p || !target || p.dead || target.id === p.id) return;
-    p.zone = target.zone;
-    p.x = target.x + (Math.random() * 30 - 15);
-    p.y = target.y + (Math.random() * 30 - 15);
-    if (circleHitsWall(mapFor(p.zone), p.x, p.y, 12)) { p.x = target.x; p.y = target.y; }
+    tpaRequests[target.id] = { fromId: p.id, expiresAt: Date.now() + 30000 };
+    io.to(target.id).emit('tpaIncoming', { fromId: p.id, fromName: p.name });
+    socket.emit('tpaSent', { targetName: target.name });
+  });
+
+  socket.on('tpaAccept', (data) => {
+    const p = players[socket.id]; // derjenige, der die Anfrage annimmt (Ziel)
+    const req = tpaRequests[socket.id];
+    if (!p || !req) return;
+    if (data && data.fromId && data.fromId !== req.fromId) return;
+    if (Date.now() > req.expiresAt) { delete tpaRequests[socket.id]; return; }
+    const requester = players[req.fromId];
+    delete tpaRequests[socket.id];
+    if (!requester || requester.dead) return;
+
+    requester.zone = p.zone;
+    requester.x = p.x + (Math.random() * 30 - 15);
+    requester.y = p.y + (Math.random() * 30 - 15);
+    if (circleHitsWall(mapFor(requester.zone), requester.x, requester.y, 12)) {
+      requester.x = p.x; requester.y = p.y;
+    }
+    io.to(requester.id).emit('tpaResult', { accepted: true, otherName: p.name });
+    socket.emit('tpaResult', { accepted: true, otherName: requester.name, asTarget: true });
+  });
+
+  socket.on('tpaDeny', (data) => {
+    const req = tpaRequests[socket.id];
+    if (!req) return;
+    delete tpaRequests[socket.id];
+    const requester = players[req.fromId];
+    const me = players[socket.id];
+    if (requester) io.to(requester.id).emit('tpaResult', { accepted: false, otherName: me ? me.name : '' });
   });
 
   socket.on('openChest', (data) => {
@@ -791,6 +820,10 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     if (p) saveAccountProgress(p);
     delete players[socket.id];
+    delete tpaRequests[socket.id];
+    for (const targetId in tpaRequests) {
+      if (tpaRequests[targetId].fromId === socket.id) delete tpaRequests[targetId];
+    }
   });
 });
 
