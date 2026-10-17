@@ -152,11 +152,6 @@ function generateDungeon(gridW, gridH, cellSize) {
   return grid.map(r => r.join(''));
 }
 
-// 25 x 5 Raster à 10 Felder -> ca. 251 x 51 Felder Gesamtkarte (bei jedem Serverstart neu generiert)
-const MAP_ROWS = generateDungeon(25, 5, 10);
-const MAP_W = MAP_ROWS[0].length;
-const MAP_H = MAP_ROWS.length;
-
 function makeArena(w, h) {
   const rows = [];
   for (let y = 0; y < h; y++) {
@@ -168,12 +163,6 @@ function makeArena(w, h) {
   }
   return rows;
 }
-const ARENA_ROWS = makeArena(20, 13);
-const ARENA_W = ARENA_ROWS[0].length;
-const ARENA_H = ARENA_ROWS.length;
-const BOSSROOM_ROWS = makeArena(24, 16);
-const BOSSROOM_W = BOSSROOM_ROWS[0].length;
-const BOSSROOM_H = BOSSROOM_ROWS.length;
 
 function buildMapInfo(rows, w, h) {
   function isWall(tx, ty) {
@@ -190,27 +179,43 @@ function buildMapInfo(rows, w, h) {
   return { rows, w, h, isWall, isFloor, floor };
 }
 
-const DUNGEON = buildMapInfo(MAP_ROWS, MAP_W, MAP_H);
-const ARENA = buildMapInfo(ARENA_ROWS, ARENA_W, ARENA_H);
-const BOSSROOM = buildMapInfo(BOSSROOM_ROWS, BOSSROOM_W, BOSSROOM_H);
+// ---------------- Dungeon-Stufen (abhaengig vom Spieler-Level) ----------------
+const DUNGEON_TIER_DEFS = [
+  { key: 'tier1', name: 'Anfänger-Dungeon', minLevel: 1, gridW: 25, gridH: 5, cellSize: 10, monsterMult: 1, lootMult: 1 },
+  { key: 'tier2', name: 'Fortgeschrittenen-Dungeon', minLevel: 10, gridW: 25, gridH: 5, cellSize: 10, monsterMult: 2.6, lootMult: 1.6 },
+  { key: 'tier3', name: 'Experten-Dungeon', minLevel: 25, gridW: 25, gridH: 5, cellSize: 10, monsterMult: 5, lootMult: 2.4 }
+];
+const DUNGEON_TIERS = {};
+for (const def of DUNGEON_TIER_DEFS) {
+  const rows = generateDungeon(def.gridW, def.gridH, def.cellSize);
+  DUNGEON_TIERS[def.key] = { ...def, rows, map: buildMapInfo(rows, rows[0].length, rows.length) };
+}
+const DEFAULT_TIER_KEY = DUNGEON_TIER_DEFS[0].key;
+function tierForLevel(level) {
+  let chosen = DUNGEON_TIER_DEFS[0];
+  for (const def of DUNGEON_TIER_DEFS) if (level >= def.minLevel) chosen = def;
+  return chosen.key;
+}
+function isDungeonTier(zone) { return !!DUNGEON_TIERS[zone]; }
+
+const ARENA_ROWS = makeArena(20, 13);
+const ARENA = buildMapInfo(ARENA_ROWS, ARENA_ROWS[0].length, ARENA_ROWS.length);
+const BOSSROOM_ROWS = makeArena(24, 16);
+const BOSSROOM = buildMapInfo(BOSSROOM_ROWS, BOSSROOM_ROWS[0].length, BOSSROOM_ROWS.length);
+
 function mapFor(zone) {
   if (zone === 'arena') return ARENA;
   if (zone === 'bossroom') return BOSSROOM;
-  return DUNGEON;
+  if (DUNGEON_TIERS[zone]) return DUNGEON_TIERS[zone].map;
+  return DUNGEON_TIERS[DEFAULT_TIER_KEY].map;
 }
 
-function isWall(tx, ty) { return DUNGEON.isWall(tx, ty); }
-function isFloor(tx, ty) { return DUNGEON.isFloor(tx, ty); }
-
-// Alle begehbaren Tiles sammeln (fuer Spawns)
-const floorTiles = DUNGEON.floor;
 function randomFloorTile(zone) {
   const m = mapFor(zone);
   return m.floor[Math.floor(Math.random() * m.floor.length)];
 }
-const SPAWN_TILE = DUNGEON.floor[0]; // Fallback, falls mal alles blockiert waere
-function randomDungeonSpawn() {
-  const t = randomFloorTile('dungeon');
+function randomTierSpawn(zone) {
+  const t = randomFloorTile(zone || DEFAULT_TIER_KEY);
   return { x: t.x * TILE + TILE / 2, y: t.y * TILE + TILE / 2 };
 }
 const ARENA_SPAWN_TILE = ARENA.floor[Math.floor(ARENA.floor.length / 2)];
@@ -272,19 +277,24 @@ const MONSTER_TYPES = {
   ork:    { hp: 95, dmg: 16, speed: 0.9, xp: 40, range: 34, cooldown: 1200, color: '#5b4636', radius: 16 },
   boss:   { hp: 900, dmg: 32, speed: 1.0, xp: 400, range: 48, cooldown: 900, color: '#c0392b', radius: 26, name: 'Dungeon-Wächter' }
 };
-const MAX_MONSTERS = 300;
+const MAX_MONSTERS_PER_TIER = 100;
 
-function spawnMonster() {
-  if (Object.keys(monsters).length >= MAX_MONSTERS) return;
+function spawnMonster(zone) {
+  zone = zone || DEFAULT_TIER_KEY;
+  const tierDef = DUNGEON_TIERS[zone];
+  if (!tierDef) return;
+  const countInZone = Object.values(monsters).reduce((n, m) => n + ((m.zone || DEFAULT_TIER_KEY) === zone ? 1 : 0), 0);
+  if (countInZone >= MAX_MONSTERS_PER_TIER) return;
   const type = Math.random() < 0.7 ? 'goblin' : 'ork';
   const def = MONSTER_TYPES[type];
-  const tile = randomFloorTile('dungeon');
+  const tile = randomFloorTile(zone);
   const id = 'm' + (monsterIdCounter++);
+  const mult = tierDef.monsterMult;
   monsters[id] = {
-    id, type, zone: 'dungeon',
+    id, type, zone, mult,
     x: tile.x * TILE + TILE / 2,
     y: tile.y * TILE + TILE / 2,
-    hp: def.hp, maxHp: def.hp,
+    hp: Math.round(def.hp * mult), maxHp: Math.round(def.hp * mult),
     lastAttack: 0,
     targetId: null,
     homeX: tile.x * TILE + TILE / 2,
@@ -293,16 +303,24 @@ function spawnMonster() {
 }
 
 function spawnItem(x, y, zone) {
+  zone = zone || DEFAULT_TIER_KEY;
   const roll = Math.random();
   const type = roll < 0.6 ? 'gold' : 'potion';
   const id = 'i' + (itemIdCounter++);
-  const amount = type === 'gold' ? Math.round((5 + Math.floor(Math.random() * 15)) * goldMult()) : 1;
-  items[id] = { id, type, x, y, amount, zone: zone || 'dungeon' };
+  const lootMult = (DUNGEON_TIERS[zone] && DUNGEON_TIERS[zone].lootMult) || 1;
+  const amount = type === 'gold' ? Math.round((5 + Math.floor(Math.random() * 15)) * goldMult() * lootMult) : 1;
+  items[id] = { id, type, x, y, amount, zone };
 }
 
-// Initiale Monster
-for (let i = 0; i < 100; i++) spawnMonster();
-setInterval(() => { for (let i = 0; i < 3; i++) { if (Math.random() < 0.7) spawnMonster(); } }, 3000);
+// Initiale Monster pro Dungeon-Stufe
+for (const key in DUNGEON_TIERS) {
+  for (let i = 0; i < 35; i++) spawnMonster(key);
+}
+setInterval(() => {
+  for (const key in DUNGEON_TIERS) {
+    for (let i = 0; i < 2; i++) { if (Math.random() < 0.7) spawnMonster(key); }
+  }
+}, 3000);
 
 // ---------------- Hilfsfunktionen ----------------
 function dist(ax, ay, bx, by) {
@@ -338,21 +356,25 @@ function tryMove(mapInfo, entity, dx, dy, radius) {
 }
 
 // ---------------- Truhen ----------------
-const CHEST_COUNT = 40;
+const CHEST_COUNT_PER_TIER = 14;
 const CHEST_RESPAWN_MS = 90000;
 const chests = {};
 (function initChests() {
-  const step = Math.floor(floorTiles.length / (CHEST_COUNT + 1));
-  for (let i = 1; i <= CHEST_COUNT; i++) {
-    const tile = floorTiles[step * i];
-    const id = 'c' + i;
-    chests[id] = {
-      id,
-      x: tile.x * TILE + TILE / 2,
-      y: tile.y * TILE + TILE / 2,
-      looted: false,
-      respawnAt: 0
-    };
+  let counter = 1;
+  for (const key in DUNGEON_TIERS) {
+    const floor = DUNGEON_TIERS[key].map.floor;
+    const step = Math.floor(floor.length / (CHEST_COUNT_PER_TIER + 1));
+    for (let i = 1; i <= CHEST_COUNT_PER_TIER; i++) {
+      const tile = floor[step * i];
+      const id = 'c' + (counter++);
+      chests[id] = {
+        id, zone: key,
+        x: tile.x * TILE + TILE / 2,
+        y: tile.y * TILE + TILE / 2,
+        looted: false,
+        respawnAt: 0
+      };
+    }
   }
 })();
 
@@ -367,12 +389,18 @@ function applyPvpDamage(target, dmg, attacker) {
 
 function respawnPlayer(p) {
   let sp;
-  if (p.zone === 'arena') sp = ARENA_SPAWN;
-  else if (p.zone === 'bossroom') sp = BOSSROOM_ENTRY;
-  else sp = randomDungeonSpawn();
+  if (p.zone === 'arena') {
+    sp = ARENA_SPAWN;
+  } else if (p.zone === 'bossroom') {
+    sp = BOSSROOM_ENTRY;
+  } else {
+    // Beim Respawn automatisch in die zum aktuellen Level passende Stufe wechseln
+    p.zone = tierForLevel(p.level);
+    sp = randomTierSpawn(p.zone);
+  }
   p.x = sp.x;
   p.y = sp.y;
-  p.hp = p.zone === 'dungeon' ? Math.max(1, Math.floor(p.maxHp * 0.5)) : p.maxHp;
+  p.hp = isDungeonTier(p.zone) ? Math.max(1, Math.floor(p.maxHp * 0.5)) : p.maxHp;
   p.dead = false;
 }
 
@@ -422,9 +450,9 @@ function onMonsterKilled(m, killer) {
     if (killer) killer.potions += 2;
     io.emit('announcement', `🏆 ${killer ? killer.name : 'Jemand'} hat den Boss besiegt! Riesiger Loot-Regen!`);
   } else {
-    spawnItem(m.x, m.y, 'dungeon');
+    spawnItem(m.x, m.y, m.zone || DEFAULT_TIER_KEY);
   }
-  if (killer) grantXp(killer, MONSTER_TYPES[m.type].xp);
+  if (killer) grantXp(killer, Math.round(MONSTER_TYPES[m.type].xp * (m.mult || 1)));
 }
 
 // ---------------- Admin ----------------
@@ -465,13 +493,14 @@ io.on('connection', (socket) => {
       }
 
       const stats = statsForLevel(account.cls, account.level);
-      const loginSpawn = randomDungeonSpawn();
+      const loginTier = tierForLevel(account.level);
+      const loginSpawn = randomTierSpawn(loginTier);
       players[socket.id] = {
         id: socket.id,
         username,
         name: name || username,
         cls: account.cls,
-        zone: 'dungeon',
+        zone: loginTier,
         x: loginSpawn.x,
         y: loginSpawn.y,
         hp: stats.maxHp,
@@ -496,9 +525,14 @@ io.on('connection', (socket) => {
       recomputeStats(players[socket.id]);
       players[socket.id].hp = players[socket.id].maxHp;
 
+      const dungeonTiersPayload = {};
+      for (const key in DUNGEON_TIERS) {
+        const t = DUNGEON_TIERS[key];
+        dungeonTiersPayload[key] = { name: t.name, minLevel: t.minLevel, rows: t.rows };
+      }
       socket.emit('init', {
         you: socket.id,
-        map: MAP_ROWS,
+        dungeonTiers: dungeonTiersPayload,
         arenaMap: ARENA_ROWS,
         bossRoomMap: BOSSROOM_ROWS,
         tile: TILE,
@@ -560,7 +594,7 @@ io.on('connection', (socket) => {
       let closest = null, closestDist = Infinity;
       for (const id in monsters) {
         const m = monsters[id];
-        if ((m.zone || 'dungeon') !== p.zone) continue;
+        if ((m.zone || DEFAULT_TIER_KEY) !== p.zone) continue;
         const d = dist(p.x, p.y, m.x, m.y);
         if (d < def.range && d < closestDist) { closest = m; closestDist = d; }
       }
@@ -597,8 +631,8 @@ io.on('connection', (socket) => {
   socket.on('leaveArena', () => {
     const p = players[socket.id];
     if (!p) return;
-    p.zone = 'dungeon';
-    const sp = randomDungeonSpawn();
+    p.zone = tierForLevel(p.level);
+    const sp = randomTierSpawn(p.zone);
     p.x = sp.x; p.y = sp.y;
     p.hp = p.maxHp;
     p.dead = false;
@@ -616,8 +650,8 @@ io.on('connection', (socket) => {
   socket.on('leaveBossRoom', () => {
     const p = players[socket.id];
     if (!p) return;
-    p.zone = 'dungeon';
-    const sp = randomDungeonSpawn();
+    p.zone = tierForLevel(p.level);
+    const sp = randomTierSpawn(p.zone);
     p.x = sp.x; p.y = sp.y;
     p.hp = p.maxHp;
     p.dead = false;
@@ -661,16 +695,33 @@ io.on('connection', (socket) => {
     if (requester) io.to(requester.id).emit('tpaResult', { accepted: false, otherName: me ? me.name : '' });
   });
 
+  socket.on('travelToTier', (data) => {
+    const p = players[socket.id];
+    if (!p || p.dead) return;
+    const key = data && data.tier;
+    const tierDef = DUNGEON_TIERS[key];
+    if (!tierDef) return;
+    if (p.level < tierDef.minLevel) {
+      return socket.emit('shopError', `Benötigt Level ${tierDef.minLevel} (du bist Level ${p.level}).`);
+    }
+    p.zone = key;
+    const sp = randomTierSpawn(key);
+    p.x = sp.x; p.y = sp.y;
+    p.hp = p.maxHp;
+    p.dead = false;
+  });
+
   socket.on('openChest', (data) => {
     const p = players[socket.id];
-    if (!p || p.dead || p.zone !== 'dungeon') return;
+    if (!p || p.dead || !isDungeonTier(p.zone)) return;
     const chest = chests[data && data.chestId];
-    if (!chest || chest.looted) return;
+    if (!chest || chest.looted || chest.zone !== p.zone) return;
     if (dist(p.x, p.y, chest.x, chest.y) > 44) return;
 
     chest.looted = true;
     chest.respawnAt = Date.now() + CHEST_RESPAWN_MS;
-    const gold = Math.round((20 + Math.floor(Math.random() * 40)) * goldMult());
+    const lootMult = (DUNGEON_TIERS[p.zone] && DUNGEON_TIERS[p.zone].lootMult) || 1;
+    const gold = Math.round((20 + Math.floor(Math.random() * 40)) * goldMult() * lootMult);
     const gotPotion = Math.random() < 0.35;
     p.gold += gold;
     if (gotPotion) p.potions += 1;
@@ -854,11 +905,11 @@ function tick() {
       dy = (dy / len) * effSpeed * dtScale;
       tryMove(mapFor(p.zone), p, dx, dy, 12);
     }
-    if (p.zone !== 'dungeon' && p.zone !== 'bossroom') continue;
+    if (!isDungeonTier(p.zone) && p.zone !== 'bossroom') continue;
     // Items einsammeln (nur passend zur eigenen Zone)
     for (const iid in items) {
       const it = items[iid];
-      if ((it.zone || 'dungeon') !== p.zone) continue;
+      if ((it.zone || DEFAULT_TIER_KEY) !== p.zone) continue;
       if (dist(p.x, p.y, it.x, it.y) < 20) {
         if (it.type === 'gold') p.gold += it.amount;
         else if (it.type === 'potion') p.potions += 1;
@@ -876,7 +927,7 @@ function tick() {
   // Monster-KI
   for (const id in monsters) {
     const m = monsters[id];
-    const mZone = m.zone || 'dungeon';
+    const mZone = m.zone || DEFAULT_TIER_KEY;
     const mMap = mapFor(mZone);
     let target = null, targetDist = Infinity;
     for (const pid in players) {
@@ -894,8 +945,9 @@ function tick() {
         const now = Date.now();
         if (now - m.lastAttack > def.cooldown) {
           m.lastAttack = now;
-          target.hp -= def.dmg;
-          io.to(target.id).emit('hit', { x: target.x, y: target.y, dmg: def.dmg });
+          const dmg = Math.round(def.dmg * (m.mult || 1));
+          target.hp -= dmg;
+          io.to(target.id).emit('hit', { x: target.x, y: target.y, dmg });
           if (target.hp <= 0 && !target.dead) {
             target.dead = true;
             setTimeout(() => respawnPlayer(target), 3000);
@@ -936,7 +988,7 @@ function tick() {
     } else if (!hitSomething) {
       for (const mid in monsters) {
         const m = monsters[mid];
-        if ((m.zone || 'dungeon') !== pr.zone) continue;
+        if ((m.zone || DEFAULT_TIER_KEY) !== pr.zone) continue;
         if (dist(pr.x, pr.y, m.x, m.y) < 16) {
           m.hp -= pr.dmg;
           io.emit('hit', { x: m.x, y: m.y, dmg: pr.dmg });
@@ -964,7 +1016,7 @@ function broadcastState() {
       upgDmg: p.upgDmg, upgHp: p.upgHp, upgSpeed: p.upgSpeed
     })),
     monsters: Object.values(monsters).map(m => ({
-      id: m.id, type: m.type, zone: m.zone || 'dungeon', x: m.x, y: m.y, hp: m.hp, maxHp: m.maxHp
+      id: m.id, type: m.type, zone: m.zone || DEFAULT_TIER_KEY, x: m.x, y: m.y, hp: m.hp, maxHp: m.maxHp
     })),
     items: Object.values(items),
     chests: Object.values(chests).map(c => ({ id: c.id, x: c.x, y: c.y, looted: c.looted })),
