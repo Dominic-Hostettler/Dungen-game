@@ -154,6 +154,21 @@
     width:100%; padding:8px; border:none; border-radius:8px;
     background:#2a2f3a; color:#ddd; cursor:pointer; font-size:12px;
   }
+  #tiersPanel {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    background: var(--panel); border:2px solid #2a2f3a; border-radius:14px;
+    padding:22px 24px; width:340px; max-width:90vw; z-index:26; display:none;
+    box-shadow: 0 10px 40px rgba(0,0,0,.6);
+  }
+  #tiersPanel h2 { margin:0 0 4px; color:var(--accent); font-size:18px; text-align:center; }
+  #tiersPanel p.sub { margin:0 0 14px; text-align:center; color:#9aa2b1; font-size:12px; }
+  #tiersClose { width:100%; padding:8px; border:none; border-radius:8px; background:#2a2f3a; color:#ddd; cursor:pointer; font-size:12px; }
+  .tierRow { display:flex; justify-content:space-between; align-items:center; background:#0d1117; border:1px solid #2a2f3a; border-radius:8px; padding:10px 12px; margin-bottom:8px; font-size:12px; }
+  .tierRow.current { border-color: var(--accent); }
+  .tierRow.locked { opacity:.5; }
+  .tierRow .tierMeta { color:#8892a0; font-size:11px; margin-top:2px; }
+  .tierRow button { padding:6px 10px; border:none; border-radius:6px; font-size:11px; cursor:pointer; background: linear-gradient(180deg,#f0d27a,#c99a3a); color:#241a05; font-weight:bold; }
+  .tierRow button:disabled { opacity:.5; cursor:not-allowed; }
   #playersList { max-height:220px; overflow-y:auto; margin-bottom:10px; }
   .playerRow {
     display:flex; justify-content:space-between; align-items:center;
@@ -297,6 +312,7 @@
     <h2>Menü</h2>
     <button class="menuOption" id="menuOptionShop">🏪 Shop</button>
     <button class="menuOption" id="menuOptionPvp">⚔️ PvP-Lobby</button>
+    <button class="menuOption" id="menuOptionTiers">🗺️ Dungeon wählen</button>
     <button class="menuOption" id="menuOptionBossroom">👑 Boss-Raum</button>
     <button class="menuOption" id="menuOptionPlayers">🧭 Zu Spieler teleportieren</button>
     <button class="menuOption" id="menuOptionAdmin" style="display:none;">👑 Admin-Panel</button>
@@ -350,6 +366,14 @@
     <button id="pvpToggleBtn">Arena betreten</button>
     <div id="pvpList"></div>
     <button id="pvpClose">Schliessen</button>
+  </div>
+
+  <div id="tiersPanel">
+    <h2>🗺️ Dungeon wählen</h2>
+    <p class="sub">Höhere Dungeons haben stärkere Gegner, aber mehr XP und Gold. Nach einem Tod landest du automatisch im passenden Dungeon für dein Level.</p>
+    <div id="tiersList"></div>
+    <div id="tiersMsg" style="min-height:16px; color:#ff8080; font-size:12px; text-align:center; margin-bottom:8px;"></div>
+    <button id="tiersClose">Schliessen</button>
   </div>
 
   <div id="bossroomPanel">
@@ -426,7 +450,8 @@ function resize() { canvas.width = window.innerWidth; canvas.height = window.inn
 window.addEventListener('resize', resize); resize();
 
 let socket = null;
-let TILE = 32, MAP = [], ARENA_MAP = [], BOSSROOM_MAP = [], myId = null, CLASSES = {};
+let TILE = 32, ARENA_MAP = [], BOSSROOM_MAP = [], myId = null, CLASSES = {};
+let DUNGEON_TIERS = {}; // key -> { name, minLevel, rows }
 let world = { players: [], monsters: [], items: [], chests: [], projectiles: [], events: {} };
 let selectedClass = 'krieger';
 let hitFx = [];
@@ -489,6 +514,7 @@ document.getElementById('menuBtn').addEventListener('click', () => toggleMenu())
 document.getElementById('menuOptionClose').addEventListener('click', () => toggleMenu(false));
 document.getElementById('menuOptionShop').addEventListener('click', () => { toggleMenu(false); toggleShop(true); });
 document.getElementById('menuOptionPvp').addEventListener('click', () => { toggleMenu(false); togglePvpPanel(true); });
+document.getElementById('menuOptionTiers').addEventListener('click', () => { toggleMenu(false); toggleTiersPanel(true); });
 document.getElementById('menuOptionBossroom').addEventListener('click', () => { toggleMenu(false); toggleBossroomPanel(true); });
 document.getElementById('menuOptionPlayers').addEventListener('click', () => { toggleMenu(false); togglePlayersPanel(true); });
 document.getElementById('menuOptionAdmin').addEventListener('click', () => { toggleMenu(false); toggleAdminPanel(true); });
@@ -524,6 +550,36 @@ document.getElementById('pvpToggleBtn').addEventListener('click', () => {
   setTimeout(renderPvpPanel, 150);
 });
 document.getElementById('pvpClose').addEventListener('click', () => togglePvpPanel(false));
+
+// ---------------- Dungeon-Stufen ----------------
+let tiersOpen = false;
+function toggleTiersPanel(force) {
+  tiersOpen = (typeof force === 'boolean') ? force : !tiersOpen;
+  document.getElementById('tiersPanel').style.display = tiersOpen ? 'block' : 'none';
+  document.getElementById('tiersMsg').textContent = '';
+  if (tiersOpen) renderTiersPanel();
+}
+function renderTiersPanel() {
+  const me = world.players.find(p => p.id === myId);
+  if (!me) return;
+  const list = document.getElementById('tiersList');
+  list.innerHTML = Object.keys(DUNGEON_TIERS).map(key => {
+    const t = DUNGEON_TIERS[key];
+    const locked = me.level < t.minLevel;
+    const current = me.zone === key;
+    return `<div class="tierRow ${current ? 'current' : ''} ${locked ? 'locked' : ''}">
+      <div><div>🏰 ${t.name}</div><div class="tierMeta">${locked ? '🔒 ab Level ' + t.minLevel : 'ab Level ' + t.minLevel}${current ? ' · du bist hier' : ''}</div></div>
+      <button data-tier="${key}" ${locked || current ? 'disabled' : ''}>Betreten</button>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('button[data-tier]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      socket.emit('travelToTier', { tier: btn.dataset.tier });
+      setTimeout(renderTiersPanel, 200);
+    });
+  });
+}
+document.getElementById('tiersClose').addEventListener('click', () => toggleTiersPanel(false));
 
 // ---------------- Boss-Raum ----------------
 let bossroomOpen = false;
@@ -563,7 +619,12 @@ function togglePlayersPanel(force) {
   document.getElementById('playersPanel').style.display = playersPanelOpen ? 'block' : 'none';
   if (playersPanelOpen) renderPlayersPanel();
 }
-const ZONE_LABELS = { dungeon: '🏰 Dungeon', arena: '⚔️ Arena', bossroom: '👑 Boss-Raum' };
+function zoneLabel(zone) {
+  if (zone === 'arena') return '⚔️ Arena';
+  if (zone === 'bossroom') return '👑 Boss-Raum';
+  const t = DUNGEON_TIERS[zone];
+  return t ? '🏰 ' + t.name : (zone || 'Dungeon');
+}
 function renderPlayersPanel() {
   const list = document.getElementById('playersList');
   const others = world.players.filter(p => p.id !== myId);
@@ -573,7 +634,7 @@ function renderPlayersPanel() {
   }
   list.innerHTML = others.map(p => `
     <div class="playerRow">
-      <span>${p.name} (Lv${p.level}) · ${ZONE_LABELS[p.zone] || p.zone}</span>
+      <span>${p.name} (Lv${p.level}) · ${zoneLabel(p.zone)}</span>
       <button data-id="${p.id}">Anfrage senden</button>
     </div>
   `).join('');
@@ -679,7 +740,7 @@ function startGame() {
     document.getElementById('playBtn').disabled = false;
   });
   socket.on('init', (data) => {
-    myId = data.you; MAP = data.map; ARENA_MAP = data.arenaMap; BOSSROOM_MAP = data.bossRoomMap; TILE = data.tile; CLASSES = data.classes;
+    myId = data.you; DUNGEON_TIERS = data.dungeonTiers || {}; ARENA_MAP = data.arenaMap; BOSSROOM_MAP = data.bossRoomMap; TILE = data.tile; CLASSES = data.classes;
     isAdmin = !!data.isAdmin;
     document.getElementById('startScreen').style.display = 'none';
     document.getElementById('hud').style.display = 'flex';
@@ -706,6 +767,8 @@ function startGame() {
   socket.on('hit', (h) => { hitFx.push({ ...h, life: 20 }); });
   socket.on('chat', (m) => addChat(m.name + ': ' + m.text));
   socket.on('shopError', (msg) => {
+    const tm = document.getElementById('tiersMsg');
+    if (tm) { tm.textContent = msg; setTimeout(() => { if (tm.textContent === msg) tm.textContent = ''; }, 3000); }
     const el = document.getElementById('shopMsg');
     el.textContent = msg;
     setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 2500);
@@ -867,17 +930,19 @@ function addChat(text) {
 function loop() { render(); requestAnimationFrame(loop); }
 
 function render() {
-  if (!MAP.length) return;
   const me = world.players.find(p => p.id === myId);
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   if (!me) return;
 
-  currentZone = me.zone || 'dungeon';
-  const activeMap = currentZone === 'arena' ? ARENA_MAP : (currentZone === 'bossroom' ? BOSSROOM_MAP : MAP);
+  currentZone = me.zone || Object.keys(DUNGEON_TIERS)[0];
+  const tierInfo = DUNGEON_TIERS[currentZone];
+  const activeMap = currentZone === 'arena' ? ARENA_MAP : (currentZone === 'bossroom' ? BOSSROOM_MAP : (tierInfo ? tierInfo.rows : null));
+  if (!activeMap || !activeMap.length) return;
+  const isDungeonTierZone = !!tierInfo;
   const zoneLbl = document.getElementById('zoneLabel');
-  zoneLbl.textContent = currentZone === 'arena' ? '⚔️ PvP-Arena' : (currentZone === 'bossroom' ? '👑 Boss-Raum' : '🏰 Dungeon');
-  zoneLbl.className = currentZone;
+  zoneLbl.textContent = currentZone === 'arena' ? '⚔️ PvP-Arena' : (currentZone === 'bossroom' ? '👑 Boss-Raum' : (tierInfo ? '🏰 ' + tierInfo.name : '🏰 Dungeon'));
+  zoneLbl.className = currentZone === 'arena' ? 'arena' : (currentZone === 'bossroom' ? 'bossroom' : 'dungeon');
 
   const camX = me.x - canvas.width / 2;
   const camY = me.y - canvas.height / 2;
@@ -906,7 +971,7 @@ function render() {
 
   // Items (passend zur aktuellen Zone: Dungeon- oder Boss-Raum-Loot)
   for (const it of world.items) {
-    if ((it.zone || 'dungeon') !== currentZone) continue;
+    if (it.zone !== currentZone) continue;
     const sx = it.x - camX, sy = it.y - camY;
     ctx.beginPath();
     ctx.arc(sx, sy, 7, 0, Math.PI * 2);
@@ -914,11 +979,12 @@ function render() {
     ctx.fill();
   }
 
-  if (currentZone === 'dungeon') {
+  if (isDungeonTierZone) {
     // Truhen (nur im Dungeon)
     nearestChestId = null;
     let nearestChestDist = Infinity;
     for (const c of world.chests) {
+      if (c.zone !== currentZone) continue;
       const sx = c.x - camX, sy = c.y - camY;
       ctx.font = '22px Verdana';
       ctx.textAlign = 'center';
@@ -933,10 +999,10 @@ function render() {
     document.getElementById('interactBtn').style.display = 'none';
   }
 
-  if (currentZone === 'dungeon' || currentZone === 'bossroom') {
+  if (isDungeonTierZone || currentZone === 'bossroom') {
     // Monster (im Dungeon oder im Boss-Raum, je nach eigener Zone)
     for (const m of world.monsters) {
-      if ((m.zone || 'dungeon') !== currentZone) continue;
+      if (m.zone !== currentZone) continue;
       const sx = m.x - camX, sy = m.y - camY;
       const isBoss = m.type === 'boss';
       const radius = isBoss ? 30 : (m.type === 'ork' ? 15 : 11);
@@ -959,7 +1025,7 @@ function render() {
 
   // Projektile
   for (const pr of world.projectiles) {
-    if ((pr.zone || 'dungeon') !== currentZone) continue;
+    if (pr.zone !== currentZone) continue;
     ctx.beginPath();
     ctx.arc(pr.x - camX, pr.y - camY, 4, 0, Math.PI * 2);
     ctx.fillStyle = '#6fd1ff';
@@ -968,7 +1034,7 @@ function render() {
 
   // Spieler (nur gleiche Zone)
   for (const p of world.players) {
-    if (p.dead || (p.zone || 'dungeon') !== currentZone) continue;
+    if (p.dead || p.zone !== currentZone) continue;
     const sx = p.x - camX, sy = p.y - camY;
     const color = (CLASSES[p.cls] && CLASSES[p.cls].color) || '#fff';
     ctx.beginPath();
