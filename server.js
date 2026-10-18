@@ -152,6 +152,111 @@ function generateDungeon(gridW, gridH, cellSize) {
   return grid.map(r => r.join(''));
 }
 
+// Hoehlen-Generator (Cellular Automata) - organische Hoehlen, nur die groesste zusammenhaengende Region bleibt
+function generateCave(w, h) {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    let grid = [];
+    for (let y = 0; y < h; y++) {
+      const row = new Uint8Array(w);
+      for (let x = 0; x < w; x++) {
+        row[x] = (x === 0 || y === 0 || x === w - 1 || y === h - 1 || Math.random() < 0.45) ? 1 : 0;
+      }
+      grid.push(row);
+    }
+    for (let it = 0; it < 5; it++) {
+      const next = [];
+      for (let y = 0; y < h; y++) {
+        const row = new Uint8Array(w);
+        for (let x = 0; x < w; x++) {
+          if (x === 0 || y === 0 || x === w - 1 || y === h - 1) { row[x] = 1; continue; }
+          let walls = 0;
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) walls += grid[y + dy][x + dx];
+          row[x] = walls >= 5 ? 1 : 0;
+        }
+        next.push(row);
+      }
+      grid = next;
+    }
+    // Groesste zusammenhaengende Bodenregion finden
+    const region = new Int32Array(w * h).fill(-1);
+    let bestId = -1, bestSize = 0, nextId = 0;
+    for (let sy = 0; sy < h; sy++) {
+      for (let sx = 0; sx < w; sx++) {
+        if (grid[sy][sx] !== 0 || region[sy * w + sx] !== -1) continue;
+        const id = nextId++;
+        let size = 0;
+        const stack = [sy * w + sx];
+        region[sy * w + sx] = id;
+        while (stack.length) {
+          const cur = stack.pop();
+          size++;
+          const cx = cur % w, cy = (cur - cx) / w;
+          const nbs = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
+          for (const [nx, ny] of nbs) {
+            if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+            if (grid[ny][nx] !== 0 || region[ny * w + nx] !== -1) continue;
+            region[ny * w + nx] = id;
+            stack.push(ny * w + nx);
+          }
+        }
+        if (size > bestSize) { bestSize = size; bestId = id; }
+      }
+    }
+    if (bestSize < w * h * 0.25) continue;
+    const rows = [];
+    for (let y = 0; y < h; y++) {
+      let row = '';
+      for (let x = 0; x < w; x++) row += (region[y * w + x] === bestId) ? '0' : '1';
+      rows.push(row);
+    }
+    return rows;
+  }
+  return generateDungeon(25, 5, 10); // Notfall-Fallback
+}
+
+// Labyrinth-Generator (Randomized DFS) mit ein paar zusaetzlichen Durchbruechen (Schleifen)
+function generateMaze(cols, rows) {
+  const W = cols * 2 + 1, H = rows * 2 + 1;
+  const grid = [];
+  for (let y = 0; y < H; y++) grid.push(new Array(W).fill('1'));
+  const visited = new Uint8Array(cols * rows);
+  const stack = [[0, 0]];
+  visited[0] = 1;
+  grid[1][1] = '0';
+  while (stack.length) {
+    const [cx, cy] = stack[stack.length - 1];
+    const opts = [];
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = cx + dx, ny = cy + dy;
+      if (nx >= 0 && ny >= 0 && nx < cols && ny < rows && !visited[ny * cols + nx]) opts.push([nx, ny, dx, dy]);
+    }
+    if (opts.length) {
+      const [nx, ny, dx, dy] = opts[Math.floor(Math.random() * opts.length)];
+      visited[ny * cols + nx] = 1;
+      grid[ny * 2 + 1][nx * 2 + 1] = '0';
+      grid[cy * 2 + 1 + dy][cx * 2 + 1 + dx] = '0';
+      stack.push([nx, ny]);
+    } else {
+      stack.pop();
+    }
+  }
+  for (let y = 1; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      if (grid[y][x] !== '1' || Math.random() >= 0.05) continue;
+      const horiz = grid[y][x - 1] === '0' && grid[y][x + 1] === '0';
+      const vert = grid[y - 1][x] === '0' && grid[y + 1][x] === '0';
+      if (horiz || vert) grid[y][x] = '0';
+    }
+  }
+  return grid.map(r => r.join(''));
+}
+
+function buildTierRows(g) {
+  if (g.type === 'cave') return generateCave(g.w, g.h);
+  if (g.type === 'maze') return generateMaze(g.cols, g.rows);
+  return generateDungeon(g.gridW, g.gridH, g.cellSize);
+}
+
 function makeArena(w, h) {
   const rows = [];
   for (let y = 0; y < h; y++) {
@@ -181,13 +286,28 @@ function buildMapInfo(rows, w, h) {
 
 // ---------------- Dungeon-Stufen (abhaengig vom Spieler-Level) ----------------
 const DUNGEON_TIER_DEFS = [
-  { key: 'tier1', name: 'Anfänger-Dungeon', minLevel: 1, gridW: 25, gridH: 5, cellSize: 10, monsterMult: 1, lootMult: 1 },
-  { key: 'tier2', name: 'Fortgeschrittenen-Dungeon', minLevel: 10, gridW: 25, gridH: 5, cellSize: 10, monsterMult: 2.6, lootMult: 1.6 },
-  { key: 'tier3', name: 'Experten-Dungeon', minLevel: 25, gridW: 25, gridH: 5, cellSize: 10, monsterMult: 5, lootMult: 2.4 }
+  { key: 'tier1', name: 'Moosige Höhle', minLevel: 1, gen: { type: 'cave', w: 200, h: 50 }, monsterMult: 1, lootMult: 1,
+    pool: [['goblin', 5], ['slime', 4], ['bat', 2]],
+    theme: { wall: '#2f3b2c', wallTop: '#1f2a1d', floorA: '#161d14', floorB: '#1a2218' } },
+  { key: 'tier2', name: 'Verlassene Mine', minLevel: 8, gen: { type: 'rooms', gridW: 25, gridH: 5, cellSize: 10 }, monsterMult: 2, lootMult: 1.4,
+    pool: [['goblin', 4], ['ork', 3], ['bat', 3]],
+    theme: { wall: '#3a3226', wallTop: '#272016', floorA: '#1d1913', floorB: '#221e17' } },
+  { key: 'tier3', name: 'Katakomben', minLevel: 15, gen: { type: 'maze', cols: 100, rows: 22 }, monsterMult: 3.2, lootMult: 1.8,
+    pool: [['skeleton', 5], ['bat', 3], ['ork', 2]],
+    theme: { wall: '#3b3b42', wallTop: '#26262c', floorA: '#17171c', floorB: '#1b1b21' } },
+  { key: 'tier4', name: 'Eishöhlen', minLevel: 25, gen: { type: 'cave', w: 220, h: 55 }, monsterMult: 5, lootMult: 2.4,
+    pool: [['troll', 3], ['slime', 3], ['skeleton', 3]],
+    theme: { wall: '#2c4a5e', wallTop: '#1c3342', floorA: '#12202b', floorB: '#16283a' } },
+  { key: 'tier5', name: 'Vulkan-Festung', minLevel: 35, gen: { type: 'rooms', gridW: 18, gridH: 4, cellSize: 14 }, monsterMult: 8, lootMult: 3.2,
+    pool: [['troll', 4], ['demon', 3], ['skeleton', 2]],
+    theme: { wall: '#5a2a22', wallTop: '#3a1a15', floorA: '#2a1410', floorB: '#32180f' } },
+  { key: 'tier6', name: 'Der Abgrund', minLevel: 50, gen: { type: 'maze', cols: 90, rows: 20 }, monsterMult: 14, lootMult: 4.5,
+    pool: [['demon', 5], ['troll', 3]],
+    theme: { wall: '#3a2350', wallTop: '#251538', floorA: '#150d20', floorB: '#1a1128' } }
 ];
 const DUNGEON_TIERS = {};
 for (const def of DUNGEON_TIER_DEFS) {
-  const rows = generateDungeon(def.gridW, def.gridH, def.cellSize);
+  const rows = buildTierRows(def.gen);
   DUNGEON_TIERS[def.key] = { ...def, rows, map: buildMapInfo(rows, rows[0].length, rows.length) };
 }
 const DEFAULT_TIER_KEY = DUNGEON_TIER_DEFS[0].key;
@@ -275,9 +395,22 @@ let projectileIdCounter = 0;
 const MONSTER_TYPES = {
   goblin: { hp: 40, dmg: 8, speed: 1.3, xp: 15, range: 30, cooldown: 900, color: '#8e7c4d', radius: 12 },
   ork:    { hp: 95, dmg: 16, speed: 0.9, xp: 40, range: 34, cooldown: 1200, color: '#5b4636', radius: 16 },
+  slime:    { hp: 30, dmg: 6, speed: 0.8, xp: 10, range: 28, cooldown: 1000, color: '#55c26b', radius: 11 },
+  bat:      { hp: 25, dmg: 7, speed: 2.0, xp: 12, range: 26, cooldown: 700, color: '#7a5aa0', radius: 9 },
+  skeleton: { hp: 70, dmg: 14, speed: 1.1, xp: 30, range: 32, cooldown: 1000, color: '#d8d8c8', radius: 13 },
+  troll:    { hp: 180, dmg: 24, speed: 0.8, xp: 70, range: 40, cooldown: 1300, color: '#4f7a4a', radius: 18 },
+  demon:    { hp: 260, dmg: 34, speed: 1.2, xp: 110, range: 38, cooldown: 1000, color: '#c03a3a', radius: 16 },
   boss:   { hp: 900, dmg: 32, speed: 1.0, xp: 400, range: 48, cooldown: 900, color: '#c0392b', radius: 26, name: 'Dungeon-Wächter' }
 };
-const MAX_MONSTERS_PER_TIER = 100;
+const MAX_MONSTERS_PER_TIER = 60;
+
+function pickMonsterType(pool) {
+  let total = 0;
+  for (const [, w] of pool) total += w;
+  let r = Math.random() * total;
+  for (const [type, w] of pool) { r -= w; if (r <= 0) return type; }
+  return pool[0][0];
+}
 
 function spawnMonster(zone) {
   zone = zone || DEFAULT_TIER_KEY;
@@ -285,13 +418,13 @@ function spawnMonster(zone) {
   if (!tierDef) return;
   const countInZone = Object.values(monsters).reduce((n, m) => n + ((m.zone || DEFAULT_TIER_KEY) === zone ? 1 : 0), 0);
   if (countInZone >= MAX_MONSTERS_PER_TIER) return;
-  const type = Math.random() < 0.7 ? 'goblin' : 'ork';
+  const type = pickMonsterType(tierDef.pool);
   const def = MONSTER_TYPES[type];
   const tile = randomFloorTile(zone);
   const id = 'm' + (monsterIdCounter++);
   const mult = tierDef.monsterMult;
   monsters[id] = {
-    id, type, zone, mult,
+    id, type, zone, mult, dmgMult: Math.pow(mult, 0.65),
     x: tile.x * TILE + TILE / 2,
     y: tile.y * TILE + TILE / 2,
     hp: Math.round(def.hp * mult), maxHp: Math.round(def.hp * mult),
@@ -314,7 +447,7 @@ function spawnItem(x, y, zone) {
 
 // Initiale Monster pro Dungeon-Stufe
 for (const key in DUNGEON_TIERS) {
-  for (let i = 0; i < 35; i++) spawnMonster(key);
+  for (let i = 0; i < 25; i++) spawnMonster(key);
 }
 setInterval(() => {
   for (const key in DUNGEON_TIERS) {
@@ -328,7 +461,7 @@ function dist(ax, ay, bx, by) {
 }
 
 function xpToNextLevel(level) {
-  return 80 + level * 60;
+  return 80 + level * 60 + 2 * level * level;
 }
 
 // ---------------- Events (Doppel-Gold / Doppel-XP) ----------------
@@ -356,7 +489,7 @@ function tryMove(mapInfo, entity, dx, dy, radius) {
 }
 
 // ---------------- Truhen ----------------
-const CHEST_COUNT_PER_TIER = 14;
+const CHEST_COUNT_PER_TIER = 10;
 const CHEST_RESPAWN_MS = 90000;
 const chests = {};
 (function initChests() {
@@ -423,11 +556,16 @@ const BOSS_INTERVAL_MS = 10 * 60 * 1000;
 let bossId = null;
 function spawnBoss() {
   const id = 'boss' + Date.now();
+  // Boss-Staerke richtet sich nach dem Durchschnitts-Level aller Online-Spieler (max. 4-fach)
+  let sum = 0, cnt = 0;
+  for (const pid in players) { sum += players[pid].level; cnt++; }
+  const avgLevel = cnt ? sum / cnt : 1;
+  const bMult = Math.min(4, Math.max(1, 1 + (avgLevel - 8) * 0.12));
   monsters[id] = {
-    id, type: 'boss', zone: 'bossroom',
+    id, type: 'boss', zone: 'bossroom', mult: bMult, dmgMult: Math.pow(bMult, 0.65),
     x: BOSSROOM_CENTER.x,
     y: BOSSROOM_CENTER.y,
-    hp: MONSTER_TYPES.boss.hp, maxHp: MONSTER_TYPES.boss.hp,
+    hp: Math.round(MONSTER_TYPES.boss.hp * bMult), maxHp: Math.round(MONSTER_TYPES.boss.hp * bMult),
     lastAttack: 0, targetId: null,
     homeX: BOSSROOM_CENTER.x, homeY: BOSSROOM_CENTER.y
   };
@@ -452,7 +590,7 @@ function onMonsterKilled(m, killer) {
   } else {
     spawnItem(m.x, m.y, m.zone || DEFAULT_TIER_KEY);
   }
-  if (killer) grantXp(killer, Math.round(MONSTER_TYPES[m.type].xp * (m.mult || 1)));
+  if (killer) grantXp(killer, Math.round(MONSTER_TYPES[m.type].xp * Math.pow(m.mult || 1, 0.8)));
 }
 
 // ---------------- Admin ----------------
@@ -528,11 +666,12 @@ io.on('connection', (socket) => {
       const dungeonTiersPayload = {};
       for (const key in DUNGEON_TIERS) {
         const t = DUNGEON_TIERS[key];
-        dungeonTiersPayload[key] = { name: t.name, minLevel: t.minLevel, rows: t.rows };
+        dungeonTiersPayload[key] = { name: t.name, minLevel: t.minLevel, rows: t.rows, theme: t.theme };
       }
       socket.emit('init', {
         you: socket.id,
         dungeonTiers: dungeonTiersPayload,
+        monsterDefs: Object.fromEntries(Object.entries(MONSTER_TYPES).map(([k, v]) => [k, { color: v.color, radius: v.radius }])),
         arenaMap: ARENA_ROWS,
         bossRoomMap: BOSSROOM_ROWS,
         tile: TILE,
@@ -831,7 +970,7 @@ io.on('connection', (socket) => {
   socket.on('adminSpawnWave', () => {
     const p = players[socket.id];
     if (!p || !p.isAdmin) return;
-    for (let i = 0; i < 10; i++) spawnMonster();
+    for (let i = 0; i < 10; i++) spawnMonster(isDungeonTier(p.zone) ? p.zone : DEFAULT_TIER_KEY);
     io.emit('announcement', `👹 ${p.name} hat eine Monsterwelle beschworen!`);
   });
 
@@ -940,12 +1079,12 @@ function tick() {
       const def = MONSTER_TYPES[m.type];
       if (targetDist > def.range) {
         const angle = Math.atan2(target.y - m.y, target.x - m.x);
-        tryMove(mMap, m, Math.cos(angle) * def.speed, Math.sin(angle) * def.speed, def.radius);
+        tryMove(mMap, m, Math.cos(angle) * def.speed, Math.sin(angle) * def.speed, Math.min(def.radius, 14));
       } else {
         const now = Date.now();
         if (now - m.lastAttack > def.cooldown) {
           m.lastAttack = now;
-          const dmg = Math.round(def.dmg * (m.mult || 1));
+          const dmg = Math.round(def.dmg * (m.dmgMult || 1));
           target.hp -= dmg;
           io.to(target.id).emit('hit', { x: target.x, y: target.y, dmg });
           if (target.hp <= 0 && !target.dead) {
@@ -959,7 +1098,7 @@ function tick() {
       const d = dist(m.x, m.y, m.homeX, m.homeY);
       if (d > 10) {
         const angle = Math.atan2(m.homeY - m.y, m.homeX - m.x);
-        tryMove(mMap, m, Math.cos(angle) * 0.6, Math.sin(angle) * 0.6, MONSTER_TYPES[m.type].radius);
+        tryMove(mMap, m, Math.cos(angle) * 0.6, Math.sin(angle) * 0.6, Math.min(MONSTER_TYPES[m.type].radius, 14));
       }
     }
   }
@@ -1008,26 +1147,35 @@ function tick() {
 }
 
 function broadcastState() {
-  const state = {
-    players: Object.values(players).map(p => ({
-      id: p.id, name: p.name, cls: p.cls, x: p.x, y: p.y, zone: p.zone,
-      hp: p.hp, maxHp: p.maxHp, level: p.level, xp: p.xp, xpNext: p.xpNext,
-      gold: p.gold, potions: p.potions, speedPotions: p.speedPotions, speedBoostUntil: p.speedBoostUntil, dead: p.dead,
-      upgDmg: p.upgDmg, upgHp: p.upgHp, upgSpeed: p.upgSpeed
-    })),
-    monsters: Object.values(monsters).map(m => ({
-      id: m.id, type: m.type, zone: m.zone || DEFAULT_TIER_KEY, x: m.x, y: m.y, hp: m.hp, maxHp: m.maxHp
-    })),
-    items: Object.values(items),
-    chests: Object.values(chests).map(c => ({ id: c.id, x: c.x, y: c.y, looted: c.looted })),
-    projectiles: Object.values(projectiles).map(pr => ({ id: pr.id, x: pr.x, y: pr.y, zone: pr.zone })),
-    events: {
-      goldRemaining: Math.max(0, goldEventUntil - Date.now()),
-      xpRemaining: Math.max(0, xpEventUntil - Date.now()),
-      bossAlive: !!(bossId && monsters[bossId])
-    }
+  const playerList = Object.values(players).map(p => ({
+    id: p.id, name: p.name, cls: p.cls, x: p.x, y: p.y, zone: p.zone,
+    hp: p.hp, maxHp: p.maxHp, level: p.level, xp: p.xp, xpNext: p.xpNext,
+    gold: p.gold, potions: p.potions, speedPotions: p.speedPotions, speedBoostUntil: p.speedBoostUntil, dead: p.dead,
+    upgDmg: p.upgDmg, upgHp: p.upgHp, upgSpeed: p.upgSpeed
+  }));
+  // Monster, Items, Truhen und Projektile nur an Spieler derselben Zone senden (spart viel Bandbreite)
+  const byZone = {};
+  const bucket = (z) => byZone[z] || (byZone[z] = { monsters: [], items: [], chests: [], projectiles: [] });
+  for (const id in monsters) {
+    const m = monsters[id];
+    const z = m.zone || DEFAULT_TIER_KEY;
+    bucket(z).monsters.push({ id: m.id, type: m.type, zone: z, x: m.x, y: m.y, hp: m.hp, maxHp: m.maxHp });
+  }
+  for (const id in items) { const it = items[id]; bucket(it.zone || DEFAULT_TIER_KEY).items.push(it); }
+  for (const id in chests) { const ch = chests[id]; bucket(ch.zone).chests.push({ id: ch.id, zone: ch.zone, x: ch.x, y: ch.y, looted: ch.looted }); }
+  for (const id in projectiles) { const pr = projectiles[id]; bucket(pr.zone).projectiles.push({ id: pr.id, x: pr.x, y: pr.y, zone: pr.zone }); }
+  const events = {
+    goldRemaining: Math.max(0, goldEventUntil - Date.now()),
+    xpRemaining: Math.max(0, xpEventUntil - Date.now()),
+    bossAlive: !!(bossId && monsters[bossId])
   };
-  io.emit('state', state);
+  const empty = { monsters: [], items: [], chests: [], projectiles: [] };
+  for (const id in players) {
+    const b = byZone[players[id].zone] || empty;
+    io.to(id).emit('state', {
+      players: playerList, monsters: b.monsters, items: b.items, chests: b.chests, projectiles: b.projectiles, events
+    });
+  }
 }
 
 setInterval(tick, 1000 / TICK_RATE);
