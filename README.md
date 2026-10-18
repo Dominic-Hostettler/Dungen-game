@@ -1,4 +1,4 @@
-[README.md](https://github.com/user-attachments/files/33608318/README.md)
+[README.md](https://github.com/user-attachments/files/33625884/README.md)
 # Leo's Dungeon RPG – Setup & Deployment
 
 Echtzeit-Multiplayer-Dungeon-RPG (Node.js + Socket.io Server, Canvas-Client).
@@ -107,3 +107,21 @@ bleibt die Website dort – du verlinkst nur auf den extern gehosteten Server.
 - Ausrüstung (Waffen/Rüstung) statt nur Tränke
 - Boss-Monster
 - Persistente Charaktere (Datenbank statt In-Memory)
+
+## Dungeons (levelabhängig)
+
+Jeder Dungeon hat eine eigene, bei jedem Serverstart neu generierte Karte, eigene Farben und eigene Monster.
+Nach dem Einloggen und nach jedem Tod landest du automatisch im höchsten Dungeon, den dein Level erlaubt.
+Im Menü unter "Dungeon wählen" kannst du jederzeit in niedrigere Dungeons wechseln.
+
+| Dungeon | ab Level | Stil | Monster |
+|---|---|---|---|
+| Moosige Höhle | 1 | Höhle | Goblin, Schleim, Fledermaus |
+| Verlassene Mine | 8 | Räume und Gänge | Goblin, Ork, Fledermaus |
+| Katakomben | 15 | Labyrinth | Skelett, Fledermaus, Ork |
+| Eishöhlen | 25 | Höhle | Troll, Schleim, Skelett |
+| Vulkan-Festung | 35 | grosse Hallen | Troll, Dämon, Skelett |
+| Der Abgrund | 50 | Labyrinth | Dämon, Troll |
+
+Die Werte (Level, Stärke, Monster) stehen oben in `server.js` in `DUNGEON_TIER_DEFS` und lassen sich dort anpassen.
+Die Minimap oben rechts zeigt dich (weiss), andere Spieler (blau) und den Boss (rot).
