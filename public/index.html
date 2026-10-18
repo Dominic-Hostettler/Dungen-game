@@ -212,6 +212,11 @@
   }
   #zoneLabel.arena { color:#ff8a8a; border:1px solid #ff8a8a55; }
   #zoneLabel.dungeon { color:#9ad1ff; border:1px solid #9ad1ff55; }
+  #zoneLabel.bossroom { color:#ffb36b; border:1px solid #ffb36b55; }
+  #minimap {
+    position:absolute; top:58px; right:10px; z-index:9; display:none; pointer-events:none;
+    border:1px solid #ffffff33; border-radius:6px; background:#000000aa; image-rendering:pixelated;
+  }
   #zoneLabel.bossroom { color:#ffd766; border:1px solid #ffd76655; }
 
   #adminPanel {
@@ -298,6 +303,7 @@
 
   <button id="menuBtn">☰</button>
   <div id="zoneLabel"></div>
+  <canvas id="minimap" width="220" height="50"></canvas>
   <div id="lootToast"></div>
   <div id="tpaBox">
     <div id="tpaText">Anfrage von ...</div>
@@ -451,7 +457,8 @@ window.addEventListener('resize', resize); resize();
 
 let socket = null;
 let TILE = 32, ARENA_MAP = [], BOSSROOM_MAP = [], myId = null, CLASSES = {};
-let DUNGEON_TIERS = {}; // key -> { name, minLevel, rows }
+let DUNGEON_TIERS = {}; // key -> { name, minLevel, rows, theme }
+let MONSTER_DEFS = {};  // type -> { color, radius }
 let world = { players: [], monsters: [], items: [], chests: [], projectiles: [], events: {} };
 let selectedClass = 'krieger';
 let hitFx = [];
@@ -740,7 +747,7 @@ function startGame() {
     document.getElementById('playBtn').disabled = false;
   });
   socket.on('init', (data) => {
-    myId = data.you; DUNGEON_TIERS = data.dungeonTiers || {}; ARENA_MAP = data.arenaMap; BOSSROOM_MAP = data.bossRoomMap; TILE = data.tile; CLASSES = data.classes;
+    myId = data.you; DUNGEON_TIERS = data.dungeonTiers || {}; MONSTER_DEFS = data.monsterDefs || {}; ARENA_MAP = data.arenaMap; BOSSROOM_MAP = data.bossRoomMap; TILE = data.tile; CLASSES = data.classes;
     isAdmin = !!data.isAdmin;
     document.getElementById('startScreen').style.display = 'none';
     document.getElementById('hud').style.display = 'flex';
@@ -748,6 +755,7 @@ function startGame() {
     document.getElementById('chatInput').style.display = 'block';
     document.getElementById('menuBtn').style.display = 'flex';
     document.getElementById('zoneLabel').style.display = 'block';
+    document.getElementById('minimap').style.display = 'block';
     if (isAdmin) document.getElementById('menuOptionAdmin').style.display = 'block';
     bindInput();
     requestAnimationFrame(loop);
@@ -947,6 +955,11 @@ function render() {
   const camX = me.x - canvas.width / 2;
   const camY = me.y - canvas.height / 2;
 
+  const colors = (tierInfo && tierInfo.theme) ? tierInfo.theme
+    : (currentZone === 'arena' ? { wall: '#3a2b2b', wallTop: '#271c1c', floorA: '#211616', floorB: '#251a1a' }
+    : (currentZone === 'bossroom' ? { wall: '#4a2230', wallTop: '#341520', floorA: '#1c0f14', floorB: '#22121a' }
+    : { wall: '#2b2f3a', wallTop: '#1c1f27', floorA: '#141821', floorB: '#181c26' }));
+
   // Map
   const startCol = Math.max(0, Math.floor(camX / TILE));
   const endCol = Math.min(activeMap[0].length, Math.ceil((camX + canvas.width) / TILE));
@@ -958,12 +971,12 @@ function render() {
       const wall = activeMap[y][x] === '1';
       const sx = x * TILE - camX, sy = y * TILE - camY;
       if (wall) {
-        ctx.fillStyle = currentZone === 'arena' ? '#3a2b2b' : '#2b2f3a';
+        ctx.fillStyle = colors.wall;
         ctx.fillRect(sx, sy, TILE, TILE);
-        ctx.fillStyle = currentZone === 'arena' ? '#271c1c' : '#1c1f27';
+        ctx.fillStyle = colors.wallTop;
         ctx.fillRect(sx, sy, TILE, 4);
       } else {
-        ctx.fillStyle = ((x + y) % 2 === 0) ? (currentZone === 'arena' ? '#211616' : '#141821') : (currentZone === 'arena' ? '#251a1a' : '#181c26');
+        ctx.fillStyle = ((x + y) % 2 === 0) ? colors.floorA : colors.floorB;
         ctx.fillRect(sx, sy, TILE, TILE);
       }
     }
@@ -1005,10 +1018,11 @@ function render() {
       if (m.zone !== currentZone) continue;
       const sx = m.x - camX, sy = m.y - camY;
       const isBoss = m.type === 'boss';
-      const radius = isBoss ? 30 : (m.type === 'ork' ? 15 : 11);
+      const md = MONSTER_DEFS[m.type] || {};
+      const radius = isBoss ? 30 : (md.radius || 11);
       ctx.beginPath();
       ctx.arc(sx, sy, radius, 0, Math.PI * 2);
-      ctx.fillStyle = isBoss ? '#c0392b' : (m.type === 'ork' ? '#6b4a2f' : '#8f9c4a');
+      ctx.fillStyle = isBoss ? '#c0392b' : (md.color || '#8f9c4a');
       ctx.fill();
       if (isBoss) {
         ctx.lineWidth = 3; ctx.strokeStyle = '#ffd76688'; ctx.stroke();
@@ -1018,7 +1032,7 @@ function render() {
         ctx.fillText('👑 Boss', sx, sy - radius - 10);
         drawBar(sx - 40, sy - radius - 6, 80, 6, m.hp / m.maxHp, '#e74c3c');
       } else {
-        drawBar(sx - 16, sy - (m.type === 'ork' ? 26 : 20), 32, 4, m.hp / m.maxHp, '#e74c3c');
+        drawBar(sx - 16, sy - radius - 8, 32, 4, m.hp / m.maxHp, '#e74c3c');
       }
     }
   }
@@ -1060,10 +1074,52 @@ function render() {
     h.life -= 1;
   }
 
+  drawMinimap(me, activeMap, currentZone);
   updateHud(me);
 }
 
 function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
+
+// ---------------- Minimap ----------------
+const minimapImages = {};
+function getMinimapImage(zone, rows) {
+  if (minimapImages[zone]) return minimapImages[zone];
+  const h = rows.length, w = rows[0].length;
+  const img = document.createElement('canvas');
+  img.width = w; img.height = h;
+  const ictx = img.getContext('2d');
+  const data = ictx.createImageData(w, h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (rows[y][x] === '0') { data.data[i] = 130; data.data[i + 1] = 140; data.data[i + 2] = 160; data.data[i + 3] = 150; }
+    }
+  }
+  ictx.putImageData(data, 0, 0);
+  minimapImages[zone] = img;
+  return img;
+}
+function drawMinimap(me, rows, zone) {
+  const mm = document.getElementById('minimap');
+  if (!mm || mm.style.display === 'none') return;
+  const h = rows.length, w = rows[0].length;
+  const scale = Math.min(220 / w, 6);
+  const cw = Math.round(w * scale), ch = Math.round(h * scale);
+  if (mm.width !== cw || mm.height !== ch) { mm.width = cw; mm.height = ch; }
+  const mctx = mm.getContext('2d');
+  mctx.clearRect(0, 0, cw, ch);
+  mctx.imageSmoothingEnabled = false;
+  mctx.drawImage(getMinimapImage(zone, rows), 0, 0, w, h, 0, 0, cw, ch);
+  const dot = (x, y, r, color) => {
+    mctx.beginPath();
+    mctx.arc(x / TILE * scale, y / TILE * scale, r, 0, Math.PI * 2);
+    mctx.fillStyle = color;
+    mctx.fill();
+  };
+  for (const m of world.monsters) if (m.type === 'boss' && m.zone === zone) dot(m.x, m.y, 4, '#ff4d4d');
+  for (const p of world.players) if (p.id !== myId && p.zone === zone && !p.dead) dot(p.x, p.y, 2.5, '#6fd1ff');
+  dot(me.x, me.y, 3, '#ffffff');
+}
 
 function triggerHitFlash() {
   const el = document.getElementById('hitFlash');
