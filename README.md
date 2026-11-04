@@ -1,4 +1,4 @@
-[README.md](https://github.com/user-attachments/files/33625884/README.md)
+[Uploading README.md…]()
 # Leo's Dungeon RPG – Setup & Deployment
 
 Echtzeit-Multiplayer-Dungeon-RPG (Node.js + Socket.io Server, Canvas-Client).
@@ -116,12 +116,87 @@ Im Menü unter "Dungeon wählen" kannst du jederzeit in niedrigere Dungeons wech
 
 | Dungeon | ab Level | Stil | Monster |
 |---|---|---|---|
-| Moosige Höhle | 1 | Höhle | Goblin, Schleim, Fledermaus |
-| Verlassene Mine | 8 | Räume und Gänge | Goblin, Ork, Fledermaus |
-| Katakomben | 15 | Labyrinth | Skelett, Fledermaus, Ork |
-| Eishöhlen | 25 | Höhle | Troll, Schleim, Skelett |
-| Vulkan-Festung | 35 | grosse Hallen | Troll, Dämon, Skelett |
-| Der Abgrund | 50 | Labyrinth | Dämon, Troll |
+| Moosige Höhle | 1 | Höhle | Goblin, Schleim, Fledermaus, Bogenschütze |
+| Verlassene Mine | 8 | Räume und Gänge | Goblin, Ork, Fledermaus, Bogenschütze |
+| Katakomben | 15 | Labyrinth | Skelett, Fledermaus, Ork, Bogenschütze, Hexer |
+| Eishöhlen | 25 | Höhle | Troll, Schleim, Skelett, Hexer, Säurespucker |
+| Vulkan-Festung | 35 | grosse Hallen | Troll, Dämon, Skelett, Hexer |
+| Der Abgrund | 50 | Labyrinth | Dämon, Troll, Hexer, Säurespucker |
 
 Die Werte (Level, Stärke, Monster) stehen oben in `server.js` in `DUNGEON_TIER_DEFS` und lassen sich dort anpassen.
 Die Minimap oben rechts zeigt dich (weiss), andere Spieler (blau) und den Boss (rot).
+
+## Klassen-Fähigkeiten (Taste Q, Mobile: Button rechts unten)
+
+| Klasse | Fähigkeit | Wirkung | Abklingzeit |
+|---|---|---|---|
+| Krieger | Wirbelschlag | 1,6-facher Schaden an allen Gegnern im Umkreis (in der Arena auch an Spielern) | 8 s |
+| Magier | Feuernova | Ring aus 12 Geschossen | 10 s |
+| Schurke | Schattenschritt | Sprung in Zielrichtung, der nächste Nahkampfangriff ist ein sicherer Krit | 7 s |
+
+Werte und Abklingzeiten stehen in `server.js` bei `ABILITIES` und in `useAbility`.
+
+## Quests (Menü → Quests)
+
+Jeder Spieler hat immer drei offene Quests (Monster besiegen, bestimmte Monsterart, Truhen öffnen, Gold sammeln,
+Boss besiegen, Spieler in der Arena besiegen). Belohnungen (Gold, XP, Tränke) wachsen mit dem Dungeon, der zu deinem Level passt.
+Nicht passende Quests lassen sich mit "Tauschen" ersetzen. Der Fortschritt wird in der Datenbank gespeichert.
+
+## Charakter, Ausrüstung und Handwerk (Taste C)
+
+- **Ausrüstung:** Waffe, Rüstung und Ring in vier Seltenheiten (Gewöhnlich, Selten, Episch, Legendär). Sie fallen von Monstern (5%), aus Truhen (25%) und von Bossen (3 Stück, mindestens eines episch). Bis zu 30 im Inventar, volle Taschen werden automatisch verkauft.
+- **Verbessern:** bis +5, jede Stufe macht einen Gegenstand um 15% stärker. Kostet Essenz und Gold.
+- **Essenz (✦):** fällt bei jedem besiegten Monster, Bosse geben 25. Damit werden Gegenstände verbessert und Tränke hergestellt.
+- **Fertigkeiten:** 1 Punkt pro Levelaufstieg für Schnelle Erholung, Kampfkunst, Zähigkeit und Goldnase (je bis Stufe 5). Zurücksetzen kostet 200 Gold.
+- **Aussehen:** Farben und Hüte für Gold, dazu ein Wolf als Begleiter (400 Gold), der Gegner in der Nähe angreift.
+
+## Erfolge, Rangliste, Tagesbelohnung
+
+18 Erfolge mit Goldbelohnung. Rangliste (Level, Kills, Bosse, Arena) kommt direkt aus der Datenbank. Wer sich täglich anmeldet, bekommt eine Belohnung, die bis zur 7-Tage-Serie wächst.
+
+## Soziales
+
+- **Gruppen** bis 4 Spieler: Mitglieder in der Nähe bekommen 50% XP und Quest-Fortschritt, eigener Chat mit `/g Text`.
+- **Freundesliste** (bis 50) mit Online-Anzeige, Gruppeneinladung und Teleport-Anfrage.
+- **Handel:** Im Reiter Ausrüstung bei einem Gegenstand auf "Handeln" klicken. Der andere sieht Werte und Preis und muss zustimmen.
+- Pro Account ist nur eine Sitzung gleichzeitig möglich, eine zweite Anmeldung beendet die erste. Das verhindert Gegenstands-Duplikate.
+
+## Gefahren und Ereignisse
+
+- **Statuseffekte:** Schleim und Troll verlangsamen, Fledermäuse vergiften, Dämonen setzen in Brand. Ein Heiltrank entfernt sie.
+- **Dungeon-Bosse:** Jeder Dungeon hat alle 8 Minuten einen eigenen Boss. Alle Bosse haben einen Bodenangriff mit rotem Warnkreis, dem man ausweichen kann.
+- **Zufallsereignisse** alle 4 bis 8 Minuten: Schatzgoblin (flieht, 2 Minuten Zeit, viel Beute), Hinterhalt und Segen.
+- **Sound:** Effekte werden im Browser erzeugt, im Menü schaltbar.
+
+## Admin und Schutz
+
+Das Admin-Panel kann Spieler kicken und sperren (Sperre bleibt im Account gespeichert) und die Ereignisse oben auslösen.
+Schutz: Sperre nach 6 Fehlanmeldungen für 5 Minuten, höchstens 5 Registrierungen pro Stunde und Adresse, Chat-Bremse und ein Limit für Paketfluten.
+Aus Bandbreitengründen sendet der Server pro Spieler nur, was in Bildschirmnähe ist.
+
+## Fernkampf-Gegner und Trefferfläche
+
+- **Bogenschütze** (🏹) schiesst Pfeile, **Hexer** (🔮) feuert Feuerbälle (setzt in Brand), **Säurespucker** (☣️) vergiftet. Sie halten Abstand, rücken vor, wenn du zu weit weg bist, und schiessen nur bei freier Sicht, nicht durch Wände. Ihre Geschosse sind langsam genug zum Ausweichen.
+- **Trefferfläche:** Nahkampf, Geschosse, Wirbelschlag und Wolf berücksichtigen jetzt die Körpergrösse. Grosse Gegner und vor allem Bosse lassen sich deutlich leichter treffen, kleine Gegner wie bisher.
+
+## Einstellungen per .env-Datei (z.B. bei Infomaniak)
+
+Der Server liest `MONGO_URI` und `ADMIN_USERNAMES` aus den Umgebungsvariablen. Wenn dein Hoster dafür kein Eingabefeld hat,
+kopiere `.env.example` zu `.env`, trage deine Werte ein und lege die Datei in den Projektordner (neben `server.js`).
+Die Datei enthält dein Datenbank-Passwort: **nie ins GitHub-Repo hochladen** (steht schon in `.gitignore`).
+
+## Umzug zu Infomaniak (Node.js-Hosting)
+
+1. Im Infomaniak-Manager ein Web-Hosting mit **Node.js-Website** bestellen (30 Tage gratis testen) und die Domain zuweisen.
+2. Code per Git, ZIP oder SFTP hochladen (`package.json` direkt im Hauptordner).
+3. Im Reiter Node.js: Build-Befehl `npm install`, Start-Befehl `npm start`. Den Port setzt Infomaniak selbst über `PORT`.
+4. `MONGO_URI` und `ADMIN_USERNAMES` eintragen (Feld im Manager oder `.env`-Datei).
+5. SSL-Zertifikat aktivieren, Anwendung neu starten und `https://deine-domain.ch` öffnen.
+6. In MongoDB Atlas unter Network Access die IP-Adresse des Servers erlauben (oder `0.0.0.0/0`).
+
+## Grafik
+
+- Spielfiguren, Wolf und alle Gegner werden als gezeichnete Figuren mit Schatten, Farbverlauf, Augen und Waffen dargestellt (Krieger mit Schwert und Schild, Magier mit leuchtendem Stab, Schurke mit zwei Dolchen). Gegner schauen zum Spieler.
+- Name, Level und Hut sitzen direkt an der Figur, der Lebensbalken direkt darunter.
+- Bewegungen sind weich statt ruckelig, Böden und Wände haben Struktur und Schatten, Geschosse hinterlassen eine Leuchtspur, Treffer, Tode und Levelaufstiege erzeugen Partikel, Boss-Schläge und eigene Treffer wackeln die Kamera leicht.
+- Im Menü unter "Grafik" lässt sich zwischen Hoch und Niedrig (schneller) wechseln. Auf Handys startet das Spiel standardmässig mit Niedrig.
