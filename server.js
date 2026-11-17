@@ -562,7 +562,12 @@ function wanderIdle(m, mMap) {
   const diff = Math.atan2(Math.sin(m.wanderTarget - m.wanderAngle), Math.cos(m.wanderTarget - m.wanderAngle));
   m.wanderAngle += Math.max(-0.1, Math.min(0.1, diff));
   const r = Math.min(MONSTER_TYPES[m.type].radius, 14);
-  const spd = m.type === 'boss' ? 1.0 : 0.45;
+  let spd = 0.45;
+  if (m.type === 'boss') {
+    let nearD = Infinity;
+    for (const pid in players) { const p = players[pid]; if (p.dead || p.zone !== (m.zone || DEFAULT_TIER_KEY)) continue; const d = dist(m.x, m.y, p.x, p.y); if (d < nearD) nearD = d; }
+    spd = nearD > 600 ? 3.5 : 1.0;
+  }
   const ox = m.x, oy = m.y;
   tryMove(mMap, m, Math.cos(m.wanderAngle) * spd, Math.sin(m.wanderAngle) * spd, r);
   if (m.x === ox && m.y === oy) m.wanderUntil = 0;
