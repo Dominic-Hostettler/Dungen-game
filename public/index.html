@@ -632,6 +632,7 @@ function toggleMenu(force) {
   if (menuOpen) {
     const me = world.players.find(p => p.id === myId);
     document.getElementById('menuOptionPvp').textContent = me && me.zone === 'arena' ? '🏰 Dungeon' : '⚔️ PvP-Lobby';
+    document.getElementById('menuOptionBossroom').textContent = me && me.zone === 'bossroom' ? '🏰 Dungeon' : '👑 Boss-Raum';
   }
 }
 document.getElementById('menuBtn').addEventListener('click', () => toggleMenu());
@@ -990,7 +991,7 @@ function renderTiersPanel() {
   list.querySelectorAll('button[data-tier]').forEach(btn => {
     btn.addEventListener('click', () => {
       socket.emit('travelToTier', { tier: btn.dataset.tier });
-      setTimeout(renderTiersPanel, 200);
+      toggleTiersPanel(false);
     });
   });
 }
@@ -1023,7 +1024,7 @@ document.getElementById('bossroomToggleBtn').addEventListener('click', () => {
   const me = world.players.find(p => p.id === myId);
   if (!me) return;
   socket.emit(me.zone === 'bossroom' ? 'leaveBossRoom' : 'joinBossRoom');
-  setTimeout(renderBossroomPanel, 150);
+  toggleBossroomPanel(false);
 });
 document.getElementById('bossroomClose').addEventListener('click', () => toggleBossroomPanel(false));
 
