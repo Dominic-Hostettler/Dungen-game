@@ -90,7 +90,7 @@ async function saveAccountProgress(p) {
         upgDmg: p.upgDmg, upgHp: p.upgHp, upgSpeed: p.upgSpeed, quests: p.quests || [],
         inventory: p.inventory || [], equipment: p.equipment || {}, skills: p.skills || {}, essence: p.essence || 0,
         cosmetics: p.cosmetics || {}, pet: p.pet || null, stats: p.stats || {}, achievements: p.achievements || [], daily: p.daily || {}, friends: p.friends || [],
-        zone: p.zone, x: p.x, y: p.y
+        zone: p.zone, x: p.x, y: p.y, zonePos: p.zonePos || {}
       } }
     );
   } catch (err) {
@@ -379,6 +379,16 @@ function nearestWalkable(zone, x, y) {
   }
   return null;
 }
+
+// Beim Zonenwechsel die Position merken und beim Wiedereintritt restaurieren
+function travelToZone(p, zone, fallback) {
+  p.zonePos[p.zone] = { x: p.x, y: p.y };
+  const saved = p.zonePos[zone];
+  const m = mapFor(zone);
+  const sp = (saved && !circleHitsWall(m, saved.x, saved.y, 12) ? saved : saved && nearestWalkable(zone, saved.x, saved.y)) || fallback;
+  p.zone = zone;
+  p.x = sp.x; p.y = sp.y;
+}
 const ARENA_SPAWN_TILE = ARENA.floor[Math.floor(ARENA.floor.length / 2)];
 const ARENA_SPAWN = { x: ARENA_SPAWN_TILE.x * TILE + TILE / 2, y: ARENA_SPAWN_TILE.y * TILE + TILE / 2 };
 const BOSSROOM_ENTRY_TILE = BOSSROOM.floor[Math.floor(BOSSROOM.floor.length * 0.15)];
@@ -599,6 +609,7 @@ function respawnPlayer(p) {
     sp = BOSSROOM_ENTRY;
   } else {
     // Beim Respawn automatisch in die zum aktuellen Level passende Stufe wechseln
+    p.zonePos[p.zone] = { x: p.x, y: p.y };
     p.zone = tierForLevel(p.level);
     sp = randomTierSpawn(p.zone);
   }
@@ -1467,6 +1478,7 @@ io.on('connection', (socket) => {
         name: token ? account.username : (name || account.username),
         cls: account.cls,
         zone: loginTier,
+        zonePos: account.zonePos || {},
         x: loginSpawn.x,
         y: loginSpawn.y,
         hp: stats.maxHp,
@@ -1602,17 +1614,15 @@ io.on('connection', (socket) => {
   socket.on('joinArena', () => {
     const p = players[socket.id];
     if (!p || p.dead) return;
-    p.zone = 'arena';
-    p.x = ARENA_SPAWN.x; p.y = ARENA_SPAWN.y;
+    travelToZone(p, 'arena', ARENA_SPAWN);
     p.hp = p.maxHp;
   });
 
   socket.on('leaveArena', () => {
     const p = players[socket.id];
     if (!p) return;
-    p.zone = tierForLevel(p.level);
-    const sp = randomTierSpawn(p.zone);
-    p.x = sp.x; p.y = sp.y;
+    const t = tierForLevel(p.level);
+    travelToZone(p, t, randomTierSpawn(t));
     p.hp = p.maxHp;
     p.dead = false;
   });
@@ -1621,17 +1631,15 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     if (!p || p.dead) return;
     if (!bossId || !monsters[bossId]) return socket.emit('shopError', 'Aktuell ist kein Boss aktiv.');
-    p.zone = 'bossroom';
-    p.x = BOSSROOM_ENTRY.x; p.y = BOSSROOM_ENTRY.y;
+    travelToZone(p, 'bossroom', BOSSROOM_ENTRY);
     p.hp = p.maxHp;
   });
 
   socket.on('leaveBossRoom', () => {
     const p = players[socket.id];
     if (!p) return;
-    p.zone = tierForLevel(p.level);
-    const sp = randomTierSpawn(p.zone);
-    p.x = sp.x; p.y = sp.y;
+    const t = tierForLevel(p.level);
+    travelToZone(p, t, randomTierSpawn(t));
     p.hp = p.maxHp;
     p.dead = false;
   });
@@ -1655,6 +1663,7 @@ io.on('connection', (socket) => {
     delete tpaRequests[socket.id];
     if (!requester || requester.dead) return;
 
+    requester.zonePos[requester.zone] = { x: requester.x, y: requester.y };
     requester.zone = p.zone;
     requester.x = p.x + (Math.random() * 30 - 15);
     requester.y = p.y + (Math.random() * 30 - 15);
@@ -1997,9 +2006,7 @@ io.on('connection', (socket) => {
     if (p.level < tierDef.minLevel) {
       return socket.emit('shopError', `Benötigt Level ${tierDef.minLevel} (du bist Level ${p.level}).`);
     }
-    p.zone = key;
-    const sp = randomTierSpawn(key);
-    p.x = sp.x; p.y = sp.y;
+    travelToZone(p, key, randomTierSpawn(key));
     p.hp = p.maxHp;
     p.dead = false;
   });
