@@ -626,7 +626,7 @@ document.getElementById('menuOptionAdmin').addEventListener('click', () => { tog
 document.getElementById('menuOptionLeave').addEventListener('click', () => {
   if (confirm('Spiel wirklich verlassen?')) {
     try { localStorage.removeItem('dungeonSession'); } catch (e) {}
-    if (socket) socket.disconnect();
+    if (socket) { socket.emit('logout'); socket.disconnect(); }
     location.reload();
   }
 });

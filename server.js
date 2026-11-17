@@ -60,6 +60,8 @@ async function loadAccount(username) {
   return accountsCol.findOne({ username });
 }
 
+const SESSION_TOKEN_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
 async function loadAccountByToken(token) {
   if (!accountsCol) return null;
   return accountsCol.findOne({ sessionToken: token });
@@ -1392,7 +1394,8 @@ io.on('connection', (socket) => {
       let account;
       if (token) {
         account = await loadAccountByToken(token);
-        if (!account) { authFail(key); return socket.emit('authError', 'Sitzung abgelaufen - bitte erneut anmelden.'); }
+        const tokenAge = account ? Date.now() - new Date(account.sessionTokenAt || 0).getTime() : Infinity;
+        if (!account || tokenAge > SESSION_TOKEN_MAX_AGE_MS) { authFail(key); return socket.emit('authError', 'Sitzung abgelaufen - bitte erneut anmelden.'); }
         authOk(key);
       } else {
         if (!username || username.length < 3) {
@@ -1429,7 +1432,7 @@ io.on('connection', (socket) => {
       }
 
       const sessionToken = crypto.randomBytes(32).toString('hex');
-      await accountsCol.updateOne({ username: account.username }, { $set: { sessionToken } });
+      await accountsCol.updateOne({ username: account.username }, { $set: { sessionToken, sessionTokenAt: new Date() } });
 
       const stats = statsForLevel(account.cls, account.level);
       const savedZoneOk = isDungeonTier(account.zone) && account.level >= DUNGEON_TIERS[account.zone].minLevel;
@@ -2141,6 +2144,13 @@ io.on('connection', (socket) => {
     if (!p || !p.isAdmin) return;
     bossCycle();
     io.emit('announcement', `👑 ${p.name} hat den Boss sofort herbeigerufen!`);
+  });
+
+  socket.on('logout', async () => {
+    const p = players[socket.id];
+    if (p && accountsCol) {
+      try { await accountsCol.updateOne({ username: p.username }, { $unset: { sessionToken: '', sessionTokenAt: '' } }); } catch (e) {}
+    }
   });
 
   socket.on('disconnect', () => {
