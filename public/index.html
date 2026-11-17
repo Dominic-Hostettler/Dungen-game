@@ -119,10 +119,13 @@
   }
   #menuPanel h2 { margin:0 0 14px; color:var(--accent); font-size:18px; text-align:center; }
   .menuOption {
-    width:100%; padding:11px; margin-bottom:8px; border-radius:8px; border:1px solid #2a2f3a;
+    width:100%; padding:11px; margin-bottom:5px; border-radius:8px; border:1px solid #2a2f3a;
     background:#0d1117; color:#eee; cursor:pointer; font-size:13px; text-align:left;
   }
   .menuOption:hover { border-color: var(--accent); }
+  .menuGroup { margin:12px 0 4px; color:#8892a0; font-size:10px; text-transform:uppercase; letter-spacing:1.2px; }
+  .menuSep { border-top:1px solid #2a2f3a; margin:12px 0 10px; }
+  #menuOptionClose { border-color: var(--accent); color: var(--accent); }
   #menuOptionLeave { color:#ff8a8a; }
 
   #pvpPanel {
@@ -382,18 +385,23 @@
 
   <div id="menuPanel">
     <h2>Menü</h2>
-    <button class="menuOption" id="menuOptionShop">🏪 Shop</button>
-    <button class="menuOption" id="menuOptionPvp">⚔️ PvP-Lobby</button>
-    <button class="menuOption" id="menuOptionChar">🎒 Charakter (C)</button>
-    <button class="menuOption" id="menuOptionRank">🏆 Erfolge &amp; Rangliste</button>
-    <button class="menuOption" id="menuOptionSocial">👥 Soziales (Gruppe, Freunde)</button>
-    <button class="menuOption" id="menuOptionQuests">📜 Quests</button>
+    <div class="menuGroup">Welt</div>
     <button class="menuOption" id="menuOptionTiers">🗺️ Dungeon wählen</button>
     <button class="menuOption" id="menuOptionBossroom">👑 Boss-Raum</button>
+    <button class="menuOption" id="menuOptionPvp">⚔️ PvP-Lobby</button>
+    <div class="menuGroup">Charakter</div>
+    <button class="menuOption" id="menuOptionChar">🎒 Charakter (C)</button>
+    <button class="menuOption" id="menuOptionQuests">📜 Quests</button>
+    <button class="menuOption" id="menuOptionRank">🏆 Erfolge &amp; Rangliste</button>
+    <button class="menuOption" id="menuOptionShop">🏪 Shop</button>
+    <div class="menuGroup">Soziales</div>
+    <button class="menuOption" id="menuOptionSocial">👥 Soziales (Gruppe, Freunde)</button>
     <button class="menuOption" id="menuOptionPlayers">🧭 Zu Spieler teleportieren</button>
-    <button class="menuOption" id="menuOptionAdmin" style="display:none;">👑 Admin-Panel</button>
+    <div class="menuGroup">Einstellungen</div>
     <button class="menuOption" id="menuOptionGfx">🎨 Grafik: Hoch</button>
     <button class="menuOption" id="menuOptionSound">🔊 Ton: an</button>
+    <button class="menuOption" id="menuOptionAdmin" style="display:none;">👑 Admin-Panel</button>
+    <div class="menuSep"></div>
     <button class="menuOption" id="menuOptionClose">▶️ Weiterspielen</button>
     <button class="menuOption" id="menuOptionLeave">🚪 Spiel verlassen</button>
   </div>
