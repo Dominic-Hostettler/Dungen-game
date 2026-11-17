@@ -2293,7 +2293,7 @@ function tick() {
     const pMap = mapFor(pr.zone);
     if (pMap.isWall(Math.floor(pr.x / TILE), Math.floor(pr.y / TILE))) hitSomething = true;
 
-    if (pr.hostile) {
+    if (!pr.dying && pr.hostile) {
       if (!hitSomething) {
         for (const pid in players) {
           const pl = players[pid];
@@ -2306,7 +2306,7 @@ function tick() {
           }
         }
       }
-    } else if (!hitSomething && pr.zone === 'arena') {
+    } else if (!pr.dying && !hitSomething && pr.zone === 'arena') {
       for (const pid in players) {
         const other = players[pid];
         if (pid === pr.ownerId || other.zone !== 'arena' || other.dead) continue;
@@ -2317,7 +2317,7 @@ function tick() {
           break;
         }
       }
-    } else if (!hitSomething) {
+    } else if (!pr.dying && !hitSomething) {
       for (const mid in monsters) {
         const m = monsters[mid];
         if ((m.zone || DEFAULT_TIER_KEY) !== pr.zone) continue;
@@ -2333,7 +2333,14 @@ function tick() {
         }
       }
     }
-    if (hitSomething || pr.life <= 0) delete projectiles[id];
+    if (hitSomething) {
+      io.emit('prBoom', { x: Math.round(pr.x), y: Math.round(pr.y), zone: pr.zone, hostile: !!pr.hostile, color: pr.hostile ? pr.color : undefined });
+      delete projectiles[id]; continue;
+    }
+    if (pr.life <= 0) {
+      if (pr.dying) delete projectiles[id];
+      else { pr.dying = true; pr.life = 9; pr.vx *= 0.35; pr.vy *= 0.35; }
+    }
   }
 
   broadcastState();
@@ -2379,7 +2386,7 @@ function broadcastState() {
   }
   for (const id in items) { const it = items[id]; bucket(it.zone || DEFAULT_TIER_KEY).items.push({ id: it.id, type: it.type, x: Math.round(it.x), y: Math.round(it.y), amount: it.amount, zone: it.zone }); }
   for (const id in chests) { const ch = chests[id]; bucket(ch.zone).chests.push({ id: ch.id, zone: ch.zone, x: Math.round(ch.x), y: Math.round(ch.y), looted: ch.looted }); }
-  for (const id in projectiles) { const pr = projectiles[id]; bucket(pr.zone).projectiles.push({ id: pr.id, x: Math.round(pr.x), y: Math.round(pr.y), zone: pr.zone, hostile: !!pr.hostile, color: pr.hostile ? pr.color : undefined }); }
+  for (const id in projectiles) { const pr = projectiles[id]; bucket(pr.zone).projectiles.push({ id: pr.id, x: Math.round(pr.x), y: Math.round(pr.y), zone: pr.zone, hostile: !!pr.hostile, color: pr.hostile ? pr.color : undefined, dying: pr.dying ? pr.life : undefined }); }
   const events = {
     goldRemaining: Math.max(0, goldEventUntil - now),
     xpRemaining: Math.max(0, xpEventUntil - now),

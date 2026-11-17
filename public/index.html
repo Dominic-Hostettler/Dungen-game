@@ -1250,6 +1250,11 @@ function startGame(authData) {
     const mp = myPlayer();
     if (mp && dist(mp.x, mp.y, h.x, h.y) < 450) sfx('hit', 70);
   });
+  socket.on('prBoom', (b) => {
+    if (b.zone !== currentZone) return;
+    const mp = myPlayer();
+    if (mp && dist(mp.x, mp.y, b.x, b.y) < 600) spawnParticles(b.x, b.y, b.color || (b.hostile ? '#ff6b3c' : '#7fdcff'), 12, 2.8, 0.55, 2.5);
+  });
   socket.on('bossSlam', (r) => {
     slamFx.push({ ...r, at: Date.now() });
     if (r.zone === currentZone) { sfx('warn', 200); setTimeout(() => sfx('slam', 200), r.ms); }
@@ -1941,14 +1946,22 @@ function render() {
     const tail = smoothPos('t' + pr.id, pr.x, pr.y, 1 - Math.exp(-dt * 9));
     const hx = head.x - camX, hy = head.y - camY, tx = tail.x - camX, ty = tail.y - camY;
     const col = pr.hostile ? (pr.color || '#ff6b3c') : '#7fdcff';
-    if (gfxHigh) {
-      glow(hx, hy, pr.hostile ? 16 : 14, pr.hostile ? 'rgba(255,120,60,0.5)' : 'rgba(110,210,255,0.5)');
-      ctx.strokeStyle = col; ctx.globalAlpha = 0.55; ctx.lineWidth = pr.hostile ? 5 : 4; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke(); ctx.globalAlpha = 1;
+    const fade = pr.dying ? Math.max(0.05, pr.dying / 9) : 1;
+    if (pr.dying && gfxHigh && particles.length < 260) {
+      const dl = Math.hypot(head.x - tail.x, head.y - tail.y) || 1, fx0 = (head.x - tail.x) / dl, fy0 = (head.y - tail.y) / dl;
+      particles.push({ x: head.x + (Math.random() - 0.5) * 5, y: head.y + (Math.random() - 0.5) * 5, vx: fx0 * (1.5 + Math.random() * 1.5), vy: fy0 * (1.5 + Math.random() * 1.5), life: 0.15 + Math.random() * 0.15, max: 0.3, color: col, size: 1.5 + Math.random() * 1.5 });
     }
-    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(hx, hy, pr.hostile ? 5 : 4, 0, TAU); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.beginPath(); ctx.arc(hx, hy, 2, 0, TAU); ctx.fill();
-    if (pr.hostile) { ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.beginPath(); ctx.arc(hx, hy, 5, 0, TAU); ctx.stroke(); }
+    if (gfxHigh) {
+      glow(hx, hy, (pr.hostile ? 16 : 14) * fade, pr.hostile ? 'rgba(255,120,60,0.5)' : 'rgba(110,210,255,0.5)');
+      ctx.strokeStyle = col; ctx.globalAlpha = 0.55 * fade; ctx.lineWidth = pr.hostile ? 5 : 4; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke();
+    }
+    ctx.globalAlpha = fade;
+    const r = (pr.hostile ? 5 : 4) * (0.4 + 0.6 * fade);
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(hx, hy, r, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.beginPath(); ctx.arc(hx, hy, r * 0.5, 0, TAU); ctx.fill();
+    if (pr.hostile) { ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.beginPath(); ctx.arc(hx, hy, r, 0, TAU); ctx.stroke(); }
+    ctx.globalAlpha = 1;
   }
 
   // ---- Boss-Bodenangriffe (Warnkreis) ----
