@@ -621,6 +621,10 @@ let menuOpen = false;
 function toggleMenu(force) {
   menuOpen = (typeof force === 'boolean') ? force : !menuOpen;
   document.getElementById('menuPanel').style.display = menuOpen ? 'block' : 'none';
+  if (menuOpen) {
+    const me = world.players.find(p => p.id === myId);
+    document.getElementById('menuOptionPvp').textContent = me && me.zone === 'arena' ? '🏰 Dungeon' : '⚔️ PvP-Lobby';
+  }
 }
 document.getElementById('menuBtn').addEventListener('click', () => toggleMenu());
 document.getElementById('menuOptionClose').addEventListener('click', () => toggleMenu(false));
@@ -660,7 +664,7 @@ document.getElementById('pvpToggleBtn').addEventListener('click', () => {
   const me = world.players.find(p => p.id === myId);
   if (!me) return;
   socket.emit(me.zone === 'arena' ? 'leaveArena' : 'joinArena');
-  setTimeout(renderPvpPanel, 150);
+  togglePvpPanel(false);
 });
 document.getElementById('pvpClose').addEventListener('click', () => togglePvpPanel(false));
 
