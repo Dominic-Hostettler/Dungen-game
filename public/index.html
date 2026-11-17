@@ -596,7 +596,9 @@ function shopCostClient(key, count) {
 }
 let shopOpen = false;
 function toggleShop(force) {
-  shopOpen = (typeof force === 'boolean') ? force : !shopOpen;
+  const want = (typeof force === 'boolean') ? force : !shopOpen;
+  if (want) closeAllPanels();
+  shopOpen = want;
   document.getElementById('shopPanel').style.display = shopOpen ? 'block' : 'none';
   if (shopOpen) renderShop();
 }
@@ -626,8 +628,14 @@ document.getElementById('shopClose').addEventListener('click', () => toggleShop(
 
 // ---------------- Menü ----------------
 let menuOpen = false;
+function closeAllPanels() {
+  toggleShop(false); toggleMenu(false); togglePvpPanel(false); toggleQuestsPanel(false);
+  toggleTiersPanel(false); toggleBossroomPanel(false); togglePlayersPanel(false); toggleAdminPanel(false); closeBig();
+}
 function toggleMenu(force) {
-  menuOpen = (typeof force === 'boolean') ? force : !menuOpen;
+  const want = (typeof force === 'boolean') ? force : !menuOpen;
+  if (want) closeAllPanels();
+  menuOpen = want;
   document.getElementById('menuPanel').style.display = menuOpen ? 'block' : 'none';
   if (menuOpen) {
     const me = world.players.find(p => p.id === myId);
@@ -654,7 +662,9 @@ document.getElementById('menuOptionLeave').addEventListener('click', () => {
 // ---------------- PvP-Lobby ----------------
 let pvpOpen = false;
 function togglePvpPanel(force) {
-  pvpOpen = (typeof force === 'boolean') ? force : !pvpOpen;
+  const want = (typeof force === 'boolean') ? force : !pvpOpen;
+  if (want) closeAllPanels();
+  pvpOpen = want;
   document.getElementById('pvpPanel').style.display = pvpOpen ? 'block' : 'none';
   if (pvpOpen) renderPvpPanel();
 }
@@ -884,6 +894,7 @@ function renderBig() {
   document.getElementById('bpBody').innerHTML = bigBody();
 }
 function openBig(kind, tab) {
+  closeAllPanels();
   bigKind = kind;
   bigTab = tab || BIG[kind].tabs[0][0];
   document.getElementById('bigPanel').style.display = 'flex';
@@ -943,7 +954,9 @@ document.getElementById('menuOptionSocial').addEventListener('click', () => { to
 // ---------------- Quests ----------------
 let questsOpen = false;
 function toggleQuestsPanel(force) {
-  questsOpen = (typeof force === 'boolean') ? force : !questsOpen;
+  const want = (typeof force === 'boolean') ? force : !questsOpen;
+  if (want) closeAllPanels();
+  questsOpen = want;
   document.getElementById('questsPanel').style.display = questsOpen ? 'block' : 'none';
   if (questsOpen) renderQuestsPanel();
 }
@@ -970,7 +983,9 @@ document.getElementById('menuOptionQuests').addEventListener('click', () => { to
 // ---------------- Dungeon-Stufen ----------------
 let tiersOpen = false;
 function toggleTiersPanel(force) {
-  tiersOpen = (typeof force === 'boolean') ? force : !tiersOpen;
+  const want = (typeof force === 'boolean') ? force : !tiersOpen;
+  if (want) closeAllPanels();
+  tiersOpen = want;
   document.getElementById('tiersPanel').style.display = tiersOpen ? 'block' : 'none';
   document.getElementById('tiersMsg').textContent = '';
   if (tiersOpen) renderTiersPanel();
@@ -1000,7 +1015,9 @@ document.getElementById('tiersClose').addEventListener('click', () => toggleTier
 // ---------------- Boss-Raum ----------------
 let bossroomOpen = false;
 function toggleBossroomPanel(force) {
-  bossroomOpen = (typeof force === 'boolean') ? force : !bossroomOpen;
+  const want = (typeof force === 'boolean') ? force : !bossroomOpen;
+  if (want) closeAllPanels();
+  bossroomOpen = want;
   document.getElementById('bossroomPanel').style.display = bossroomOpen ? 'block' : 'none';
   if (bossroomOpen) renderBossroomPanel();
 }
@@ -1031,7 +1048,9 @@ document.getElementById('bossroomClose').addEventListener('click', () => toggleB
 // ---------------- Spieler-Teleport ----------------
 let playersPanelOpen = false;
 function togglePlayersPanel(force) {
-  playersPanelOpen = (typeof force === 'boolean') ? force : !playersPanelOpen;
+  const want = (typeof force === 'boolean') ? force : !playersPanelOpen;
+  if (want) closeAllPanels();
+  playersPanelOpen = want;
   document.getElementById('playersPanel').style.display = playersPanelOpen ? 'block' : 'none';
   if (playersPanelOpen) renderPlayersPanel();
 }
@@ -1085,7 +1104,9 @@ function renderAdminPlayers() {
   box.innerHTML = others.length ? others.map(q => '<div class="pl"><span>' + esc(q.name) + ' (Lv' + q.level + ')</span><span><button data-kick="' + q.id + '">Kick</button><button data-ban="' + q.id + '">Sperren</button></span></div>').join('') : '<span class="muted" style="font-size:11px">Niemand sonst online.</span>';
 }
 function toggleAdminPanel(force) {
-  adminOpen = (typeof force === 'boolean') ? force : !adminOpen;
+  const want = (typeof force === 'boolean') ? force : !adminOpen;
+  if (want) closeAllPanels();
+  adminOpen = want;
   if (adminOpen) renderAdminPlayers();
   document.getElementById('adminPanel').style.display = adminOpen ? 'block' : 'none';
 }
