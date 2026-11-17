@@ -625,6 +625,7 @@ document.getElementById('menuOptionPlayers').addEventListener('click', () => { t
 document.getElementById('menuOptionAdmin').addEventListener('click', () => { toggleMenu(false); toggleAdminPanel(true); });
 document.getElementById('menuOptionLeave').addEventListener('click', () => {
   if (confirm('Spiel wirklich verlassen?')) {
+    try { localStorage.removeItem('dungeonSession'); } catch (e) {}
     if (socket) socket.disconnect();
     location.reload();
   }
@@ -1139,24 +1140,32 @@ document.getElementById('playBtn').addEventListener('click', startGame);
 document.getElementById('passInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') startGame(); });
 
 let authSocket = null;
-function startGame() {
-  const username = document.getElementById('userInput').value.trim();
-  const password = document.getElementById('passInput').value;
-  const name = document.getElementById('nameInput').value.trim() || username;
+function startGame(authData) {
   const msgBox = document.getElementById('authMsg');
   msgBox.textContent = '';
 
-  if (!username || username.length < 3) { msgBox.textContent = 'Benutzername braucht mind. 3 Zeichen.'; return; }
-  if (!password || password.length < 4) { msgBox.textContent = 'Passwort braucht mind. 4 Zeichen.'; return; }
+  let auth;
+  if (authData && authData.token) {
+    auth = { token: authData.token };
+  } else {
+    const username = document.getElementById('userInput').value.trim();
+    const password = document.getElementById('passInput').value;
+    const name = document.getElementById('nameInput').value.trim() || username;
+    if (!username || username.length < 3) { msgBox.textContent = 'Benutzername braucht mind. 3 Zeichen.'; return; }
+    if (!password || password.length < 4) { msgBox.textContent = 'Passwort braucht mind. 4 Zeichen.'; return; }
+    auth = { mode: authMode, username, password, name, cls: selectedClass };
+  }
 
   document.getElementById('playBtn').disabled = true;
 
   socket = io();
   socket.on('authError', (msg) => {
+    try { localStorage.removeItem('dungeonSession'); } catch (e) {}
     msgBox.textContent = msg;
     document.getElementById('playBtn').disabled = false;
   });
   socket.on('init', (data) => {
+    try { if (data.token) localStorage.setItem('dungeonSession', data.token); } catch (e) {}
     myId = data.you; DUNGEON_TIERS = data.dungeonTiers || {}; MONSTER_DEFS = data.monsterDefs || {}; ABILITIES = data.abilities || {}; DEFS = data.defs || {}; ARENA_MAP = data.arenaMap; BOSSROOM_MAP = data.bossRoomMap; TILE = data.tile; CLASSES = data.classes;
     isAdmin = !!data.isAdmin;
     document.getElementById('startScreen').style.display = 'none';
@@ -1229,7 +1238,7 @@ function startGame() {
   socket.on('friends', (list) => { myFriends = list || []; if (bigKind === 'social') renderBig(); });
   socket.on('partyInvited', (r) => showPrompt('party', '👥 ' + r.fromName + ' lädt dich in eine Gruppe ein', () => socket.emit('partyAccept'), () => socket.emit('partyDecline'), 30000));
   socket.on('tradeIncoming', (r) => showPrompt('trade', '🤝 ' + r.fromName + ' bietet „' + r.item.name + '“ (' + DEFS.rarities[r.item.rarity].name + ', ' + statsText(r.item.e) + (r.item.up ? ', +' + r.item.up : '') + ') für ' + r.price + ' Gold an', () => socket.emit('tradeAccept'), () => socket.emit('tradeDeny'), 45000));
-  socket.on('kicked', (msg) => { alert(msg); location.reload(); });
+  socket.on('kicked', (msg) => { try { localStorage.removeItem('dungeonSession'); } catch (e) {} alert(msg); location.reload(); });
   socket.on('leaderboard', (r) => { lastLb[r.cat] = r.rows; if (bigKind === 'rank') renderBig(); });
   socket.on('notice', (t) => pushToast(t));
   socket.on('loot', (r) => {
@@ -1275,8 +1284,14 @@ function startGame() {
     }
   });
 
-  socket.emit('auth', { mode: authMode, username, password, name, cls: selectedClass });
+  socket.emit('auth', auth);
 }
+
+// Gespeicherte Session beim Laden automatisch fortsetzen
+try {
+  const savedSession = localStorage.getItem('dungeonSession');
+  if (savedSession) startGame({ token: savedSession });
+} catch (e) {}
 
 // ---------------- Eingabe ----------------
 const keys = {};

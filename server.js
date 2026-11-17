@@ -22,6 +22,7 @@ const path = require('path');
 const { Server } = require('socket.io');
 const { MongoClient } = require('mongodb');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -59,6 +60,11 @@ async function loadAccount(username) {
   return accountsCol.findOne({ username });
 }
 
+async function loadAccountByToken(token) {
+  if (!accountsCol) return null;
+  return accountsCol.findOne({ sessionToken: token });
+}
+
 async function createAccount(username, passwordHash, cls) {
   const doc = {
     username, passwordHash, cls,
@@ -81,7 +87,8 @@ async function saveAccountProgress(p) {
         level: p.level, xp: p.xp, gold: p.gold, potions: p.potions, speedPotions: p.speedPotions, cls: p.cls,
         upgDmg: p.upgDmg, upgHp: p.upgHp, upgSpeed: p.upgSpeed, quests: p.quests || [],
         inventory: p.inventory || [], equipment: p.equipment || {}, skills: p.skills || {}, essence: p.essence || 0,
-        cosmetics: p.cosmetics || {}, pet: p.pet || null, stats: p.stats || {}, achievements: p.achievements || [], daily: p.daily || {}, friends: p.friends || []
+        cosmetics: p.cosmetics || {}, pet: p.pet || null, stats: p.stats || {}, achievements: p.achievements || [], daily: p.daily || {}, friends: p.friends || [],
+        zone: p.zone, x: p.x, y: p.y
       } }
     );
   } catch (err) {
@@ -354,6 +361,21 @@ function randomFloorTile(zone) {
 function randomTierSpawn(zone) {
   const t = randomFloorTile(zone || DEFAULT_TIER_KEY);
   return { x: t.x * TILE + TILE / 2, y: t.y * TILE + TILE / 2 };
+}
+
+function nearestWalkable(zone, x, y) {
+  const m = mapFor(zone);
+  const cx = Math.floor(x / TILE), cy = Math.floor(y / TILE);
+  for (let r = 0; r <= 10; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+        const tx = cx + dx, ty = cy + dy;
+        if (m.isFloor(tx, ty)) return { x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2 };
+      }
+    }
+  }
+  return null;
 }
 const ARENA_SPAWN_TILE = ARENA.floor[Math.floor(ARENA.floor.length / 2)];
 const ARENA_SPAWN = { x: ARENA_SPAWN_TILE.x * TILE + TILE / 2, y: ARENA_SPAWN_TILE.y * TILE + TILE / 2 };
@@ -1358,53 +1380,67 @@ io.on('connection', (socket) => {
       const username = (data && data.username ? String(data.username) : '').trim().toLowerCase().slice(0, 20);
       const password = data && data.password ? String(data.password) : '';
       const name = (data && data.name ? String(data.name) : username).trim().slice(0, 16) || 'Held';
+      const token = data && typeof data.token === 'string' ? data.token.slice(0, 128) : '';
       const key = clientKey(socket);
       const blocked = authBlockedSeconds(key);
       if (blocked) return socket.emit('authError', `Zu viele Fehlversuche. Bitte warte ${blocked} Sekunden.`);
 
-      if (!username || username.length < 3) {
-        return socket.emit('authError', 'Benutzername muss mind. 3 Zeichen haben.');
-      }
-      if (!password || password.length < 4) {
-        return socket.emit('authError', 'Passwort muss mind. 4 Zeichen haben.');
-      }
       if (!accountsCol) {
         return socket.emit('authError', 'Datenbank nicht verbunden - Accounts sind aktuell deaktiviert. (MONGO_URI fehlt auf dem Server)');
       }
 
-      let account = await loadAccount(username);
-
-      if (mode === 'register') {
-        if (account) return socket.emit('authError', 'Dieser Benutzername ist bereits vergeben.');
-        if (!regAllowed(key)) return socket.emit('authError', 'Zu viele Registrierungen von dieser Adresse. Bitte später erneut versuchen.');
-        const classKey = CLASSES[data && data.cls] ? data.cls : 'krieger';
-        const hash = await bcrypt.hash(password, 10);
-        account = await createAccount(username, hash, classKey);
-      } else {
-        if (!account) { authFail(key); return socket.emit('authError', 'Diesen Account gibt es nicht. Bitte zuerst registrieren.'); }
-        const ok = await bcrypt.compare(password, account.passwordHash);
-        if (!ok) { authFail(key); return socket.emit('authError', 'Falsches Passwort.'); }
+      let account;
+      if (token) {
+        account = await loadAccountByToken(token);
+        if (!account) { authFail(key); return socket.emit('authError', 'Sitzung abgelaufen - bitte erneut anmelden.'); }
         authOk(key);
-        if (account.banned) return socket.emit('authError', 'Dieser Account ist gesperrt.');
-        // Nur eine Sitzung pro Account: die alte wird gespeichert und beendet (verhindert Item-Duplikate)
-        const existing = findOnline(username);
-        if (existing) {
-          await saveAccountProgress(existing);
-          delete players[existing.id];
-          leaveParty(existing);
-          io.to(existing.id).emit('kicked', 'Du hast dich an einem anderen Ort angemeldet.');
-          disconnectSocket(existing.id);
-          account = await loadAccount(username);
+      } else {
+        if (!username || username.length < 3) {
+          return socket.emit('authError', 'Benutzername muss mind. 3 Zeichen haben.');
+        }
+        if (!password || password.length < 4) {
+          return socket.emit('authError', 'Passwort muss mind. 4 Zeichen haben.');
+        }
+        account = await loadAccount(username);
+        if (mode === 'register') {
+          if (account) return socket.emit('authError', 'Dieser Benutzername ist bereits vergeben.');
+          if (!regAllowed(key)) return socket.emit('authError', 'Zu viele Registrierungen von dieser Adresse. Bitte später erneut versuchen.');
+          const classKey = CLASSES[data && data.cls] ? data.cls : 'krieger';
+          const hash = await bcrypt.hash(password, 10);
+          account = await createAccount(username, hash, classKey);
+        } else {
+          if (!account) { authFail(key); return socket.emit('authError', 'Diesen Account gibt es nicht. Bitte zuerst registrieren.'); }
+          const ok = await bcrypt.compare(password, account.passwordHash);
+          if (!ok) { authFail(key); return socket.emit('authError', 'Falsches Passwort.'); }
+          authOk(key);
         }
       }
 
+      if (account.banned) return socket.emit('authError', 'Dieser Account ist gesperrt.');
+      // Nur eine Sitzung pro Account: die alte wird gespeichert und beendet (verhindert Item-Duplikate)
+      const existing = findOnline(account.username);
+      if (existing) {
+        await saveAccountProgress(existing);
+        delete players[existing.id];
+        leaveParty(existing);
+        io.to(existing.id).emit('kicked', 'Du hast dich an einem anderen Ort angemeldet.');
+        disconnectSocket(existing.id);
+        account = await loadAccount(account.username);
+      }
+
+      const sessionToken = crypto.randomBytes(32).toString('hex');
+      await accountsCol.updateOne({ username: account.username }, { $set: { sessionToken } });
+
       const stats = statsForLevel(account.cls, account.level);
-      const loginTier = tierForLevel(account.level);
-      const loginSpawn = randomTierSpawn(loginTier);
+      const savedZoneOk = isDungeonTier(account.zone) && account.level >= DUNGEON_TIERS[account.zone].minLevel;
+      const loginTier = savedZoneOk ? account.zone : tierForLevel(account.level);
+      const savedPos = savedZoneOk && typeof account.x === 'number' && typeof account.y === 'number'
+        ? nearestWalkable(loginTier, account.x, account.y) : null;
+      const loginSpawn = savedPos || randomTierSpawn(loginTier);
       players[socket.id] = {
         id: socket.id,
-        username,
-        name: name || username,
+        username: account.username,
+        name: token ? account.username : (name || account.username),
         cls: account.cls,
         zone: loginTier,
         x: loginSpawn.x,
@@ -1423,7 +1459,7 @@ io.on('connection', (socket) => {
         upgDmg: account.upgDmg || 0,
         upgHp: account.upgHp || 0,
         upgSpeed: account.upgSpeed || 0,
-        isAdmin: ADMIN_USERNAMES.has(username),
+        isAdmin: ADMIN_USERNAMES.has(account.username),
         abilityReadyAt: 0,
         critUntil: 0,
         quests: sanitizeQuests(account.quests),
@@ -1451,7 +1487,8 @@ io.on('connection', (socket) => {
         bossRoomMap: BOSSROOM_ROWS,
         tile: TILE,
         classes: CLASSES,
-        isAdmin: players[socket.id].isAdmin
+        isAdmin: players[socket.id].isAdmin,
+        token: sessionToken
       });
       sendQuests(players[socket.id]);
       sendProfile(players[socket.id]);
