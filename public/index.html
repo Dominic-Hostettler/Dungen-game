@@ -1476,7 +1476,7 @@ updateGfxBtn();
 const smooth = new Map();      // weiche Bewegung: Schluessel -> { x, y, fx, fy, mv, seen }
 const particles = [];
 let frameId = 0, lastFrameAt = Date.now();
-let vignetteCanvas = null, vignetteKey = '';
+let LIGHT_RADIUS_TILES = 22;
 let shakeAmp = 0, shakeUntil = 0;
 let prevMonsters = new Map(), prevItems = new Map();
 let interactShown = false, zoneLabelText = '';
@@ -1781,18 +1781,6 @@ function drawChestSprite(c, sx, sy, near, t) {
 }
 
 // ----- Welt -----
-function ensureVignette() {
-  const key = canvas.width + 'x' + canvas.height;
-  if (vignetteKey === key && vignetteCanvas) return;
-  vignetteCanvas = document.createElement('canvas');
-  vignetteCanvas.width = canvas.width; vignetteCanvas.height = canvas.height;
-  const vc = vignetteCanvas.getContext('2d');
-  const w = canvas.width, h = canvas.height;
-  const g = vc.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.hypot(w, h) * 0.56);
-  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.7)');
-  vc.fillStyle = g; vc.fillRect(0, 0, w, h);
-  vignetteKey = key;
-}
 function updateZoneUi(me) {
   if (!me) return;
   const tierInfo = DUNGEON_TIERS[me.zone];
@@ -2027,8 +2015,14 @@ function render() {
   }
   ctx.globalAlpha = 1;
 
-  // ---- Stimmung: Abdunklung am Rand ----
-  if (gfxHigh) { ensureVignette(); ctx.drawImage(vignetteCanvas, 0, 0); }
+  // ---- Lichtradius: ausserhalb des Sichtradius (~350px) abdunkeln, mit weichem Verlauf ----
+  const lpx = meS.x - camX, lpy = meS.y - camY, LR = LIGHT_RADIUS_TILES * TILE;
+  const lg = ctx.createRadialGradient(lpx, lpy, LR * 0.45, lpx, lpy, LR);
+  lg.addColorStop(0, 'rgba(0,0,0,0)');
+  lg.addColorStop(0.55, 'rgba(0,0,0,0.25)');
+  lg.addColorStop(0.8, 'rgba(0,0,0,0.7)');
+  lg.addColorStop(1, 'rgba(0,0,0,0.98)');
+  ctx.fillStyle = lg; ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // ---- Aufraeumen der weichen Bewegung ----
   if (frameId % 90 === 0) for (const [key, s] of smooth) if (frameId - s.seen > 120) smooth.delete(key);
