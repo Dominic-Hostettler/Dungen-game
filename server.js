@@ -1355,7 +1355,7 @@ DUNGEON_TIER_DEFS.forEach((def, i) => {
   setTimeout(() => {
     spawnTierBoss(def.key);
     setInterval(() => spawnTierBoss(def.key), TIER_BOSS_INTERVAL_MS);
-  }, 60000 + i * 80000);
+  }, 5000 + i * 80000);
 });
 
 // ---------------- Trefferflaeche und Fernkampf-Gegner ----------------
