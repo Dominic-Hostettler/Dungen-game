@@ -1148,7 +1148,9 @@ document.querySelectorAll('.classBtn').forEach(btn => {
 });
 
 document.getElementById('playBtn').addEventListener('click', startGame);
-document.getElementById('passInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') startGame(); });
+for (const id of ['userInput', 'passInput', 'nameInput']) {
+  document.getElementById(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') startGame(); });
+}
 
 let authSocket = null;
 function startGame(authData) {
