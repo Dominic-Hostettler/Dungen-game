@@ -2083,8 +2083,8 @@ function markExplored(zone, rows, px, py) {
       delete restoredZones[zone];
     }
   }
-  // Entdeckungsradius: rund, etwa so gross wie der sichtbare Viewport
-  const R = Math.min(canvas.width, canvas.height) / 2 / TILE;
+  // Entdeckungsradius: rund, fix ~350px (ca. halber 720p-Viewport), unabhaengig von Fenstergroesse/Zoom
+  const R = 11;
   const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
   const r = Math.ceil(R);
   e.ctx.fillStyle = 'rgba(130,140,160,0.59)';
