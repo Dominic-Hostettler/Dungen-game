@@ -448,7 +448,7 @@ const MONSTER_TYPES = {
   archer:  { hp: 45, dmg: 11, speed: 0.95, xp: 22, range: 260, cooldown: 1700, color: '#c9a66b', radius: 11, ranged: { speed: 6, life: 60, color: '#f1e3b0' } },
   caster:  { hp: 60, dmg: 17, speed: 0.8, xp: 38, range: 300, cooldown: 2300, color: '#9b4dca', radius: 12, effect: 'burn', ranged: { speed: 4.5, life: 80, color: '#ff8a3c' } },
   spitter: { hp: 70, dmg: 13, speed: 0.7, xp: 30, range: 240, cooldown: 2000, color: '#7bd05a', radius: 13, effect: 'poison', ranged: { speed: 4, life: 75, color: '#8fff6b' } },
-  boss:   { hp: 900, dmg: 32, speed: 1.0, xp: 400, range: 48, cooldown: 900, color: '#c0392b', radius: 26, name: 'Dungeon-Wächter' }
+  boss:   { hp: 900, dmg: 32, speed: 1.5, xp: 400, range: 48, cooldown: 900, color: '#c0392b', radius: 26, name: 'Dungeon-Wächter' }
 };
 const MAX_MONSTERS_PER_TIER = 60;
 
@@ -552,8 +552,9 @@ function wanderIdle(m, mMap) {
   const diff = Math.atan2(Math.sin(m.wanderTarget - m.wanderAngle), Math.cos(m.wanderTarget - m.wanderAngle));
   m.wanderAngle += Math.max(-0.1, Math.min(0.1, diff));
   const r = Math.min(MONSTER_TYPES[m.type].radius, 14);
+  const spd = m.type === 'boss' ? 1.0 : 0.45;
   const ox = m.x, oy = m.y;
-  tryMove(mMap, m, Math.cos(m.wanderAngle) * 0.45, Math.sin(m.wanderAngle) * 0.45, r);
+  tryMove(mMap, m, Math.cos(m.wanderAngle) * spd, Math.sin(m.wanderAngle) * spd, r);
   if (m.x === ox && m.y === oy) m.wanderUntil = 0;
 }
 
