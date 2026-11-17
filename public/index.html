@@ -2065,7 +2065,7 @@ function markExplored(zone, rows, px, py) {
       e.ctx.fillStyle = 'rgba(130,140,160,0.59)';
       for (const i of rs) {
         const y = (i / w) | 0, x = i % w;
-        if (rows[y][x] === '0') e.ctx.fillRect(x, y, 1, 1);
+        if (rows[y][x] !== '0') e.ctx.fillRect(x, y, 1, 1);
       }
       delete restoredZones[zone];
     }
@@ -2081,7 +2081,7 @@ function markExplored(zone, rows, px, py) {
       const i = y * w + x;
       if (e.set.has(i)) continue;
       e.set.add(i); exploredDirty = true;
-      if (rows[y][x] === '0') e.ctx.fillRect(x, y, 1, 1);
+      if (rows[y][x] !== '0') e.ctx.fillRect(x, y, 1, 1);
     }
   }
 }
