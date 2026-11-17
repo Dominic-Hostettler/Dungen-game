@@ -1302,6 +1302,7 @@ function bindInput() {
     if (document.activeElement === chatInput) return;
     keys[e.key.toLowerCase()] = true;
     if (e.key === ' ') { e.preventDefault(); socket.emit('attack'); }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && 'erqcbf'.includes(e.key.toLowerCase())) e.preventDefault();
     if (e.key.toLowerCase() === 'e') socket.emit('useItem');
     if (e.key.toLowerCase() === 'r') socket.emit('useSpeedPotion');
     if (e.key.toLowerCase() === 'q') socket.emit('ability');
