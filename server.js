@@ -542,14 +542,19 @@ function wanderIdle(m, mMap) {
   const now = Date.now();
   if (!m.wanderUntil || now > m.wanderUntil) {
     m.wanderUntil = now + 3000 + Math.random() * 6000;
-    m.wanderAngle = Math.random() * Math.PI * 2;
+    // neues Ziel max. +/- 90 Grad vom bisherigen Kurs
+    m.wanderTarget = m.wanderTarget == null
+      ? Math.random() * Math.PI * 2
+      : m.wanderTarget + (Math.random() - 0.5) * Math.PI;
   }
-  if (m.wanderAngle !== null) {
-    const r = Math.min(MONSTER_TYPES[m.type].radius, 14);
-    const ox = m.x, oy = m.y;
-    tryMove(mMap, m, Math.cos(m.wanderAngle) * 0.45, Math.sin(m.wanderAngle) * 0.45, r);
-    if (m.x === ox && m.y === oy) m.wanderUntil = 0;
-  }
+  // sanft auf den Zielwinkel eindrehen statt in einem Tick zu flippen
+  if (m.wanderAngle == null) m.wanderAngle = m.wanderTarget;
+  const diff = Math.atan2(Math.sin(m.wanderTarget - m.wanderAngle), Math.cos(m.wanderTarget - m.wanderAngle));
+  m.wanderAngle += Math.max(-0.1, Math.min(0.1, diff));
+  const r = Math.min(MONSTER_TYPES[m.type].radius, 14);
+  const ox = m.x, oy = m.y;
+  tryMove(mMap, m, Math.cos(m.wanderAngle) * 0.45, Math.sin(m.wanderAngle) * 0.45, r);
+  if (m.x === ox && m.y === oy) m.wanderUntil = 0;
 }
 
 // ---------------- Truhen ----------------
@@ -2330,11 +2335,11 @@ const NEAR = 1500;           // Sichtweite in Pixeln: nur was in der Naehe ist, 
 let lastRosterAt = 0;
 function leanOf(p) {
   return {
-    id: p.id, name: p.name, cls: p.cls, x: Math.round(p.x), y: Math.round(p.y), zone: p.zone,
+    id: p.id, name: p.name, cls: p.cls, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10, zone: p.zone,
     hp: Math.round(p.hp), maxHp: p.maxHp, level: p.level, dead: p.dead,
     color: p.cosmetics && p.cosmetics.color ? COSMETICS.color[p.cosmetics.color].hex : null,
     hat: p.cosmetics && p.cosmetics.hat ? COSMETICS.hat[p.cosmetics.hat].icon : null,
-    pet: p.pet, px: p.petPos ? Math.round(p.petPos.x) : null, py: p.petPos ? Math.round(p.petPos.y) : null,
+    pet: p.pet, px: p.petPos ? Math.round(p.petPos.x * 10) / 10 : null, py: p.petPos ? Math.round(p.petPos.y * 10) / 10 : null,
     fx: fxFlags(p),
     party: p.partyId || null,
     partyLeader: !!(p.partyId && parties[p.partyId] && parties[p.partyId].leader === p.id)
@@ -2362,7 +2367,7 @@ function broadcastState() {
   for (const id in monsters) {
     const m = monsters[id];
     const z = m.zone || DEFAULT_TIER_KEY;
-    bucket(z).monsters.push({ id: m.id, type: m.type, zone: z, name: m.name, x: Math.round(m.x), y: Math.round(m.y), hp: Math.round(m.hp), maxHp: m.maxHp });
+    bucket(z).monsters.push({ id: m.id, type: m.type, zone: z, name: m.name, x: Math.round(m.x * 10) / 10, y: Math.round(m.y * 10) / 10, hp: Math.round(m.hp), maxHp: m.maxHp });
   }
   for (const id in items) { const it = items[id]; bucket(it.zone || DEFAULT_TIER_KEY).items.push({ id: it.id, type: it.type, x: Math.round(it.x), y: Math.round(it.y), amount: it.amount, zone: it.zone }); }
   for (const id in chests) { const ch = chests[id]; bucket(ch.zone).chests.push({ id: ch.id, zone: ch.zone, x: Math.round(ch.x), y: Math.round(ch.y), looted: ch.looted }); }

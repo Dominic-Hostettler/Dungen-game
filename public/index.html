@@ -1470,7 +1470,12 @@ function smoothPos(key, tx, ty, k) {
     s.x += dx * k; s.y += dy * k;
     const sp = Math.hypot(dx * k, dy * k);
     s.mv = s.mv * 0.8 + sp * 0.2;
-    if (sp > 0.12) { s.fx = dx * k / sp; s.fy = dy * k / sp; }
+    if (sp > 0.12) {
+      s.fx += (dx * k / sp - s.fx) * 0.18;
+      s.fy += (dy * k / sp - s.fy) * 0.18;
+      const fl = Math.hypot(s.fx, s.fy) || 1;
+      s.fx /= fl; s.fy /= fl;
+    }
   }
   s.seen = frameId;
   return s;
