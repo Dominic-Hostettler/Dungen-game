@@ -1188,6 +1188,7 @@ function startGame(authData) {
   socket.on('init', (data) => {
     try { if (data.token) localStorage.setItem('dungeonSession', data.token); } catch (e) {}
     myId = data.you; DUNGEON_TIERS = data.dungeonTiers || {}; MONSTER_DEFS = data.monsterDefs || {}; ABILITIES = data.abilities || {}; DEFS = data.defs || {}; ARENA_MAP = data.arenaMap; BOSSROOM_MAP = data.bossRoomMap; TILE = data.tile; CLASSES = data.classes;
+    loadExplored();
     isAdmin = !!data.isAdmin;
     document.getElementById('startScreen').style.display = 'none';
     document.getElementById('hud').style.display = 'flex';
@@ -1997,29 +1998,70 @@ function render() {
   // ---- Aufraeumen der weichen Bewegung ----
   if (frameId % 90 === 0) for (const [key, s] of smooth) if (frameId - s.seen > 120) smooth.delete(key);
 
+  markExplored(currentZone, activeMap, me.x, me.y);
   drawMinimap(me, activeMap, currentZone);
 }
 
 function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
 
-// ---------------- Minimap ----------------
-const minimapImages = {};
-function getMinimapImage(zone, rows) {
-  if (minimapImages[zone]) return minimapImages[zone];
+// ---------------- Minimap + Erkundung ----------------
+const explored = {}; // zone -> { canvas, ctx, set }
+let exploredDirty = false, restoredZones = {};
+function mapFp() {
+  let s = '';
+  for (const k in DUNGEON_TIERS) s += DUNGEON_TIERS[k].rows.join('');
+  s += (ARENA_MAP || []).join('') + (BOSSROOM_MAP || []).join('');
+  let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return h;
+}
+function loadExplored() {
+  try {
+    const d = JSON.parse(localStorage.getItem('dungeonExplored') || 'null');
+    if (d && d.fp === mapFp()) restoredZones = d.zones || {};
+    else if (d) localStorage.removeItem('dungeonExplored');
+  } catch (e) {}
+}
+function saveExplored() {
+  if (!exploredDirty || !Object.keys(DUNGEON_TIERS).length) return;
+  const zones = {};
+  for (const z in explored) zones[z] = [...explored[z].set];
+  try { localStorage.setItem('dungeonExplored', JSON.stringify({ fp: mapFp(), zones })); } catch (e) {}
+  exploredDirty = false;
+}
+setInterval(saveExplored, 4000);
+window.addEventListener('beforeunload', saveExplored);
+function markExplored(zone, rows, px, py) {
   const h = rows.length, w = rows[0].length;
-  const img = document.createElement('canvas');
-  img.width = w; img.height = h;
-  const ictx = img.getContext('2d');
-  const data = ictx.createImageData(w, h);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
-      if (rows[y][x] === '0') { data.data[i] = 130; data.data[i + 1] = 140; data.data[i + 2] = 160; data.data[i + 3] = 150; }
+  let e = explored[zone];
+  if (!e) {
+    const fog = document.createElement('canvas');
+    fog.width = w; fog.height = h;
+    e = explored[zone] = { canvas: fog, ctx: fog.getContext('2d'), set: new Set() };
+    const rs = restoredZones[zone];
+    if (rs) {
+      e.set = new Set(rs);
+      e.ctx.fillStyle = 'rgba(130,140,160,0.59)';
+      for (const i of rs) {
+        const y = (i / w) | 0, x = i % w;
+        if (rows[y][x] === '0') e.ctx.fillRect(x, y, 1, 1);
+      }
+      delete restoredZones[zone];
     }
   }
-  ictx.putImageData(data, 0, 0);
-  minimapImages[zone] = img;
-  return img;
+  // Entdeckungsradius: rund, etwa so gross wie der sichtbare Viewport
+  const R = Math.min(canvas.width, canvas.height) / 2 / TILE;
+  const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
+  const r = Math.ceil(R);
+  e.ctx.fillStyle = 'rgba(130,140,160,0.59)';
+  for (let y = Math.max(0, ty - r); y <= Math.min(h - 1, ty + r); y++) {
+    for (let x = Math.max(0, tx - r); x <= Math.min(w - 1, tx + r); x++) {
+      if ((x - tx) * (x - tx) + (y - ty) * (y - ty) > R * R) continue;
+      const i = y * w + x;
+      if (e.set.has(i)) continue;
+      e.set.add(i); exploredDirty = true;
+      if (rows[y][x] === '0') e.ctx.fillRect(x, y, 1, 1);
+    }
+  }
 }
 function drawMinimap(me, rows, zone) {
   const mm = document.getElementById('minimap');
@@ -2031,7 +2073,8 @@ function drawMinimap(me, rows, zone) {
   const mctx = mm.getContext('2d');
   mctx.clearRect(0, 0, cw, ch);
   mctx.imageSmoothingEnabled = false;
-  mctx.drawImage(getMinimapImage(zone, rows), 0, 0, w, h, 0, 0, cw, ch);
+  const fog = explored[zone];
+  if (fog) mctx.drawImage(fog.canvas, 0, 0, w, h, 0, 0, cw, ch);
   const dot = (x, y, r, color) => {
     mctx.beginPath();
     mctx.arc(x / TILE * scale, y / TILE * scale, r, 0, Math.PI * 2);
